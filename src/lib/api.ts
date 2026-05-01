@@ -78,6 +78,15 @@ export interface StudioDetail extends StudioSummary {
   cancellationWindowMinutes: number;
 }
 
+export interface InstructorSummary {
+  id: string;
+  studioId: string;
+  fullName: string;
+  bio: string;
+  avatarUrl: string | null;
+  languages: string[];
+}
+
 export interface MoneyWire {
   amount: string; // integer minor units as string
   currency: 'USD' | 'LBP' | 'EUR';
@@ -169,6 +178,10 @@ export const api = {
       }),
     getBySlug: (slug: string) => trpcQuery<StudioDetail>('studios.getBySlug', { slug }),
     cities: () => trpcQuery<string[]>('studiosPublic.cities'),
+  },
+  instructors: {
+    list: (studioId: string) =>
+      trpcQuery<InstructorSummary[]>('instructors.list', { studioId }),
   },
   classes: {
     list: (input: { studioId?: string; from: string; to: string; type?: ClassType }) =>

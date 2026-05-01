@@ -150,7 +150,7 @@ function ScreenView(props: ScreenProps) {
     case 'bookings':
       return <MyBookings goto={goto} />;
     case 'search':
-      return <Search goto={goto} />;
+      return <Search goto={goto} setActiveStudioSlug={setActiveStudioSlug} />;
     case 'profile':
       return <Profile goto={goto} />;
     case 'instructor-dashboard':

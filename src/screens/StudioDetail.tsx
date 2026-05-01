@@ -10,6 +10,7 @@ import { reviews as mockReviews } from '../data/mock';
 import type { ScreenId } from '../App';
 import { api } from '../lib/api';
 import {
+  enrichInstructor,
   enrichSession,
   enrichStudio,
   instructorFromSession,
@@ -49,6 +50,15 @@ export function StudioDetail({
     queryFn: () => {
       if (!studioQuery.data) throw new Error('Studio not loaded yet');
       return api.classes.list({ studioId: studioQuery.data.id, from: fromIso, to: toIso });
+    },
+    enabled: !!studioQuery.data,
+  });
+
+  const instructorsQuery = useQuery({
+    queryKey: ['instructors.list', studioQuery.data?.id],
+    queryFn: () => {
+      if (!studioQuery.data) throw new Error('Studio not loaded yet');
+      return api.instructors.list(studioQuery.data.id);
     },
     enabled: !!studioQuery.data,
   });
@@ -224,6 +234,24 @@ export function StudioDetail({
           </ul>
         </section>
 
+        {/* Teaching here — real instructors from the backend */}
+        {instructorsQuery.data && instructorsQuery.data.length > 0 && (
+          <section className="mt-9 px-5">
+            <div className="label-eyebrow">Teaching here</div>
+            <h2 className="font-display mt-1 text-[22px]">Instructors</h2>
+            <ul className="mt-4 space-y-4">
+              {instructorsQuery.data.map((i) => (
+                <li key={i.id}>
+                  <InstructorBadge
+                    instructor={enrichInstructor(i)}
+                    onClick={() => goto('instructor')}
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* Reviews — mock until backend exposes a Review model */}
         <section className="mt-9 px-5">
           <div className="flex items-baseline justify-between">
@@ -300,6 +328,3 @@ export function StudioDetail({
   );
 }
 
-// Suppress unused-import warning for InstructorBadge — kept for future
-// "instructors teaching here" section once a public instructors query lands.
-void InstructorBadge;

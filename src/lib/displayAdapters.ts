@@ -14,6 +14,7 @@
 import type {
   BookingSummary,
   ClassSessionSummary,
+  InstructorSummary as BackendInstructor,
   StudioDetail as BackendStudioDetail,
   StudioSummary,
 } from './api';
@@ -160,6 +161,35 @@ export function enrichSession(b: ClassSessionSummary): MockSession {
     booked: b.bookedCount,
     priceUsd: priceUsd(b.price),
     level: 'All levels',
+  };
+}
+
+/**
+ * Convert a backend `InstructorSummary` to the prototype's `Instructor` shape
+ * so the existing `InstructorBadge` component renders unchanged. Backend
+ * doesn't carry rating / specialties / yearsTeaching yet, so those fall back
+ * to sensible defaults (or merge from the prototype's mock by name when an
+ * exact match exists).
+ */
+export function enrichInstructor(b: BackendInstructor): MockInstructor {
+  const m = mockInstructors.find((mi) => mi.fullName === b.fullName);
+  return {
+    id: b.id,
+    fullName: b.fullName,
+    studioId: b.studioId,
+    portrait:
+      b.avatarUrl ??
+      m?.portrait ??
+      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&h=400&q=80',
+    specialties: m?.specialties ?? ['Mat'],
+    bio: b.bio || (m?.bio ?? ''),
+    certifications: m?.certifications ?? [],
+    yearsTeaching: m?.yearsTeaching ?? 0,
+    rating: m?.rating ?? 4.85,
+    reviewCount: m?.reviewCount ?? 0,
+    languages: (b.languages.length > 0
+      ? (b.languages.filter((l) => l === 'EN' || l === 'AR' || l === 'FR') as MockInstructor['languages'])
+      : (m?.languages ?? ['EN'])),
   };
 }
 
