@@ -1,3 +1,4 @@
+import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   ChevronRight,
   Bell,
@@ -7,9 +8,13 @@ import {
   Languages,
   ShieldCheck,
   LogOut,
+  UserPlus,
 } from 'lucide-react';
 import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
+import { Button } from '../components/ui/Button';
+import { api } from '../lib/api';
+import { authStore } from '../lib/auth';
 
 interface Row {
   id: string;
@@ -31,6 +36,77 @@ const support: Row[] = [
 ];
 
 export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
+  const signedIn = !!authStore.accessToken();
+
+  const meQuery = useQuery({
+    queryKey: ['auth.me'],
+    queryFn: () => api.auth.me(),
+    enabled: signedIn,
+  });
+
+  const upcomingQuery = useQuery({
+    queryKey: ['bookings.listMine', 'UPCOMING'],
+    queryFn: () => api.bookings.listMine('UPCOMING'),
+    enabled: signedIn,
+  });
+
+  const pastQuery = useQuery({
+    queryKey: ['bookings.listMine', 'PAST'],
+    queryFn: () => api.bookings.listMine('PAST'),
+    enabled: signedIn,
+  });
+
+  const signOutMutation = useMutation({
+    mutationFn: () => api.auth.signOut(),
+    onSettled: () => {
+      authStore.clear();
+      goto('onboarding');
+    },
+  });
+
+  if (!signedIn) {
+    return (
+      <div className="fade-in relative h-full bg-bone">
+        <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
+          <header className="px-5 pt-14">
+            <div className="label-eyebrow">Account</div>
+            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Profile</h1>
+          </header>
+          <div className="mt-10 px-5">
+            <div className="rounded-2xl border border-dashed border-stone bg-bone px-5 py-10 text-center">
+              <UserPlus size={20} className="mx-auto text-ink-60" />
+              <h3 className="font-display mt-3 text-[20px]">Sign in to see your profile</h3>
+              <p className="mt-1.5 text-[13px] text-ink-60">
+                Onboarding takes 30 seconds. We&apos;ll text you a code.
+              </p>
+              <Button size="md" className="mt-5" onClick={() => goto('onboarding')}>
+                Sign in
+              </Button>
+            </div>
+          </div>
+        </div>
+        <BottomNav active="profile" onSelect={goto} />
+      </div>
+    );
+  }
+
+  const me = meQuery.data;
+  const fullName = me?.fullName ?? 'You';
+  const phone = me?.phone ?? '';
+  const initials = fullName
+    .split(/\s+/)
+    .map((p) => p.charAt(0))
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  const upcomingCount = upcomingQuery.data?.items.length ?? 0;
+  const pastCount = pastQuery.data?.items.length ?? 0;
+  const totalSessions = upcomingCount + pastCount;
+  const distinctStudios = new Set(
+    [...(upcomingQuery.data?.items ?? []), ...(pastQuery.data?.items ?? [])].map((b) => b.studioId),
+  ).size;
+
   return (
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
@@ -46,22 +122,22 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
               className="grid h-16 w-16 place-items-center rounded-full bg-ink text-bone font-display text-[22px]"
               aria-hidden
             >
-              CZ
+              {initials}
             </div>
             <div className="flex-1">
-              <div className="text-[16px] font-medium">Carla Zakhour</div>
-              <div className="mt-0.5 text-[12px] text-ink-60">+961 70 200 014 · since Mar 2026</div>
+              <div className="text-[16px] font-medium">{fullName}</div>
+              <div className="mt-0.5 text-[12px] text-ink-60 num">{phone}</div>
             </div>
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-            <Stat label="Sessions" value="12" />
-            <Stat label="Studios" value="3" />
-            <Stat label="Streak" value="4 wk" />
+            <Stat label="Sessions" value={String(totalSessions)} />
+            <Stat label="Studios" value={String(distinctStudios)} />
+            <Stat label="Upcoming" value={String(upcomingCount)} />
           </div>
         </section>
 
-        {/* Membership */}
+        {/* Membership — placeholder until backend exposes Subscription self-view */}
         <section className="mt-5 mx-5 rounded-[20px] border border-stone bg-bone p-5">
           <div className="label-eyebrow">Membership</div>
           <div className="mt-2 flex items-center justify-between">
@@ -83,9 +159,13 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
         <List title="Support" rows={support} />
 
         <div className="mt-9 px-5">
-          <button className="press-soft inline-flex items-center gap-2 text-[14px] text-ink-60">
+          <button
+            onClick={() => signOutMutation.mutate()}
+            disabled={signOutMutation.isPending}
+            className="press-soft inline-flex items-center gap-2 text-[14px] text-ink-60 disabled:opacity-50"
+          >
             <LogOut size={14} />
-            Sign out
+            {signOutMutation.isPending ? 'Signing out…' : 'Sign out'}
           </button>
         </div>
 

@@ -1,23 +1,55 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Search, SlidersHorizontal } from 'lucide-react';
 import { Chip } from '../components/ui/Chip';
 import { StudioCard } from '../components/shared/StudioCard';
 import { InstructorBadge } from '../components/shared/InstructorBadge';
-import { instructors, studios } from '../data/mock';
 import type { ClassType } from '../data/mock';
 import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
+import { api } from '../lib/api';
+import { enrichStudio, mockInstructorList } from '../lib/displayAdapters';
 
 const categories: ClassType[] = ['Reformer', 'Mat', 'Pre/postnatal', 'Contemporary', 'Clinical'];
 
-export function Discover({ goto }: { goto: (id: ScreenId) => void }) {
+export function Discover({
+  goto,
+  setActiveStudioSlug,
+}: {
+  goto: (id: ScreenId) => void;
+  setActiveStudioSlug?: (slug: string) => void;
+}) {
   const [cat, setCat] = useState<ClassType | 'All'>('All');
-  const editorial = studios[0]!;
+
+  const studiosQuery = useQuery({
+    queryKey: ['studios.list'],
+    queryFn: () => api.studios.list(),
+  });
+
+  // Real studios first, enriched with mock cosmetic fields. Filter is purely
+  // visual — the backend doesn't expose `classTypes` on Studio yet, so the
+  // chip applies to the mock-derived `classTypes` array.
+  const studios = useMemo(() => {
+    const items = studiosQuery.data?.items ?? [];
+    const enriched = items.map(enrichStudio);
+    if (cat === 'All') return enriched;
+    return enriched.filter((s) => s.classTypes.includes(cat));
+  }, [studiosQuery.data, cat]);
+
+  const editorial = studios[0];
+
+  const today = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'Asia/Beirut',
+  }).format(new Date());
+
   return (
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
         <header className="px-5 pt-14">
-          <div className="label-eyebrow">Beirut · Tuesday, May 1</div>
+          <div className="label-eyebrow">Beirut · {today}</div>
           <h1 className="font-display mt-1 text-[30px] leading-[1.1]">
             Find your <em className="italic">next</em> class.
           </h1>
@@ -62,23 +94,38 @@ export function Discover({ goto }: { goto: (id: ScreenId) => void }) {
             <button className="text-[12px] font-medium text-ink-60">See all</button>
           </div>
           <div className="mt-4 -mx-5 flex gap-3 overflow-x-auto px-5 pb-2 scrollbar-none">
+            {studiosQuery.isLoading && (
+              <p className="px-5 text-[13px] text-ink-60">Loading studios…</p>
+            )}
+            {studiosQuery.error && (
+              <p className="px-5 text-[13px] text-terracotta">
+                Couldn&apos;t reach the API. Is it running on{' '}
+                <code className="num">localhost:4040</code>?
+              </p>
+            )}
             {studios.map((s) => (
               <StudioCard
                 key={s.id}
                 studio={s}
                 size="md"
-                onClick={() => goto('studio')}
+                onClick={() => {
+                  setActiveStudioSlug?.(s.slug);
+                  goto('studio');
+                }}
               />
             ))}
+            {!studiosQuery.isLoading && studios.length === 0 && (
+              <p className="px-5 text-[13px] text-ink-60">No studios match this practice.</p>
+            )}
           </div>
         </section>
 
-        {/* Top instructors */}
+        {/* Top instructors — mock until backend exposes a public instructors query. */}
         <section className="mt-9 px-5">
           <div className="label-eyebrow">This week</div>
           <h2 className="font-display mt-1 text-[22px]">Teachers our regulars rebook</h2>
           <ul className="mt-4 space-y-4">
-            {instructors.slice(0, 4).map((i) => (
+            {mockInstructorList.slice(0, 4).map((i) => (
               <li key={i.id} className="flex items-center justify-between">
                 <InstructorBadge instructor={i} onClick={() => goto('instructor')} />
                 <span className="num text-[13px] font-medium text-ink-60">
@@ -90,23 +137,41 @@ export function Discover({ goto }: { goto: (id: ScreenId) => void }) {
         </section>
 
         {/* Editorial */}
-        <section className="mt-12 mx-5 overflow-hidden rounded-[20px]" style={{ boxShadow: 'var(--shadow-soft)' }}>
-          <div className="relative aspect-[4/5] w-full">
-            <img src={editorial.hero} alt={editorial.name} className="absolute inset-0 h-full w-full object-cover" />
-            <div className="absolute inset-x-0 bottom-0 h-2/3" style={{ background: 'linear-gradient(to top, rgba(31,27,22,0.75) 0%, transparent 60%)' }} />
-            <div className="absolute inset-x-0 bottom-0 p-5 text-bone">
-              <div className="label-eyebrow !text-bone/70">Why we love it</div>
-              <h3 className="font-display mt-1 text-[26px] leading-tight">{editorial.name}</h3>
-              <p className="mt-2 text-[14px] leading-[1.55] text-bone/85">{editorial.loved}</p>
-              <button
-                onClick={() => goto('studio')}
-                className="press-soft mt-5 inline-flex h-10 items-center rounded-full bg-bone px-5 text-[13px] font-medium text-ink"
-              >
-                Read more
-              </button>
+        {editorial && (
+          <section
+            className="mt-12 mx-5 overflow-hidden rounded-[20px]"
+            style={{ boxShadow: 'var(--shadow-soft)' }}
+          >
+            <div className="relative aspect-[4/5] w-full">
+              <img
+                src={editorial.hero}
+                alt={editorial.name}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <div
+                className="absolute inset-x-0 bottom-0 h-2/3"
+                style={{
+                  background:
+                    'linear-gradient(to top, rgba(31,27,22,0.75) 0%, transparent 60%)',
+                }}
+              />
+              <div className="absolute inset-x-0 bottom-0 p-5 text-bone">
+                <div className="label-eyebrow !text-bone/70">Why we love it</div>
+                <h3 className="font-display mt-1 text-[26px] leading-tight">{editorial.name}</h3>
+                <p className="mt-2 text-[14px] leading-[1.55] text-bone/85">{editorial.loved}</p>
+                <button
+                  onClick={() => {
+                    setActiveStudioSlug?.(editorial.slug);
+                    goto('studio');
+                  }}
+                  className="press-soft mt-5 inline-flex h-10 items-center rounded-full bg-bone px-5 text-[13px] font-medium text-ink"
+                >
+                  Read more
+                </button>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Editorial postscript in serif italic */}
         <p className="mt-5 px-5 text-center font-display italic text-[14px] text-ink-60">

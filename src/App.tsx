@@ -44,6 +44,12 @@ const screens: { id: ScreenId; label: string; tone?: 'dark' | 'light'; group?: '
 
 export default function App() {
   const [active, setActive] = useState<ScreenId>('discover');
+  // Selected entities used for cross-screen navigation. The prototype's
+  // screen switcher is global; these track "which studio / which session
+  // should the next screen render against."
+  const [activeStudioSlug, setActiveStudioSlug] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
   const tone = screens.find((s) => s.id === active)?.tone ?? 'dark';
 
   return (
@@ -51,9 +57,9 @@ export default function App() {
       <header className="mx-auto max-w-[1280px] px-6 pt-10 pb-4">
         <div className="flex items-baseline justify-between">
           <div>
-            <div className="label-eyebrow">Design prototype</div>
+            <div className="label-eyebrow">Live · wired to backend</div>
             <h1 className="font-display mt-1 text-[28px] leading-tight">
-              Pilates Marketplace · <span className="italic">9 screens</span>
+              Pilates Marketplace · <span className="italic">live data</span>
             </h1>
           </div>
           <div className="hidden text-[12px] text-ink-60 sm:block">
@@ -69,9 +75,7 @@ export default function App() {
               const showDivider = !!prev && prev.group !== s.group;
               return (
                 <span key={s.id} className="flex items-center gap-2">
-                  {showDivider && (
-                    <span className="mx-1 h-5 w-px bg-stone" aria-hidden />
-                  )}
+                  {showDivider && <span className="mx-1 h-5 w-px bg-stone" aria-hidden />}
                   <button
                     onClick={() => setActive(s.id)}
                     className={[
@@ -93,30 +97,56 @@ export default function App() {
       {/* Stage */}
       <main className="mx-auto flex max-w-[1280px] justify-center px-6 pb-24 pt-4">
         <PhoneFrame key={active} statusBarTone={tone}>
-          <ScreenView id={active} goto={setActive} />
+          <ScreenView
+            id={active}
+            goto={setActive}
+            activeStudioSlug={activeStudioSlug}
+            activeSessionId={activeSessionId}
+            setActiveStudioSlug={setActiveStudioSlug}
+            setActiveSessionId={setActiveSessionId}
+          />
         </PhoneFrame>
       </main>
 
       <footer className="mx-auto max-w-[1280px] px-6 pb-12 text-center text-[12px] text-ink-60">
-        Click any chip above to switch screens. Use the in-app nav, back arrows, and CTAs to flow between
-        related screens — they’re all linked.
+        Click any chip above to switch screens. Real data from the local
+        backend (<code className="num">localhost:4040</code>) — sign in via
+        Onboarding with phone <code className="num">+96170000001</code>, code{' '}
+        <code className="num">123456</code>.
       </footer>
     </div>
   );
 }
 
-function ScreenView({ id, goto }: { id: ScreenId; goto: (id: ScreenId) => void }) {
+interface ScreenProps {
+  id: ScreenId;
+  goto: (id: ScreenId) => void;
+  activeStudioSlug: string | null;
+  activeSessionId: string | null;
+  setActiveStudioSlug: (slug: string | null) => void;
+  setActiveSessionId: (id: string | null) => void;
+}
+
+function ScreenView(props: ScreenProps) {
+  const { id, goto, activeStudioSlug, activeSessionId, setActiveStudioSlug, setActiveSessionId } =
+    props;
   switch (id) {
     case 'onboarding':
-      return <Onboarding />;
+      return <Onboarding goto={goto} />;
     case 'discover':
-      return <Discover goto={goto} />;
+      return <Discover goto={goto} setActiveStudioSlug={setActiveStudioSlug} />;
     case 'studio':
-      return <StudioDetail goto={goto} />;
+      return (
+        <StudioDetail
+          goto={goto}
+          slug={activeStudioSlug}
+          setActiveSessionId={setActiveSessionId}
+        />
+      );
     case 'instructor':
       return <InstructorProfile goto={goto} />;
     case 'booking':
-      return <Booking goto={goto} />;
+      return <Booking goto={goto} sessionId={activeSessionId} />;
     case 'bookings':
       return <MyBookings goto={goto} />;
     case 'search':

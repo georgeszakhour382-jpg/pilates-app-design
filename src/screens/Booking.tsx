@@ -1,29 +1,109 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Check, CreditCard, Wallet, Clock, MapPin } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { StickyCTA } from '../components/ui/StickyCTA';
-import { findInstructor, findStudio, sessions } from '../data/mock';
-import type { ClassSession } from '../data/mock';
 import type { ScreenId } from '../App';
+import { api, ApiError } from '../lib/api';
+import {
+  classTypeLabel,
+  enrichSession,
+  formatStartsAt,
+  priceUsd,
+} from '../lib/displayAdapters';
+import { authStore } from '../lib/auth';
 
 type Step = 'class' | 'time' | 'addons' | 'payment' | 'confirm';
 
-export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
+export function Booking({
+  goto,
+  sessionId,
+}: {
+  goto: (id: ScreenId) => void;
+  sessionId: string | null;
+}) {
   const [step, setStep] = useState<Step>('class');
-  const [selected, setSelected] = useState<ClassSession>(sessions[0]!);
-  const [time, setTime] = useState('09:00');
   const [addMat, setAddMat] = useState(false);
   const [pay, setPay] = useState<'card' | 'cash'>('card');
+  // Stable idempotency key for the whole booking session — protects against
+  // double-tap on the Confirm button. Backend dedups by (user, key).
+  const idempotencyKey = useMemo(() => crypto.randomUUID(), []);
 
-  const studio = findStudio(selected.studioId);
-  const instructor = findInstructor(selected.instructorId);
+  const sessionQuery = useQuery({
+    queryKey: ['classes.get', sessionId],
+    queryFn: () => {
+      if (!sessionId) throw new Error('No class selected');
+      return api.classes.get(sessionId);
+    },
+    enabled: !!sessionId,
+  });
+
+  // Studio detail for cancellation policy + address. Fetched by id (not slug)
+  // because the session response carries studioId, not slug.
+  const studioId = sessionQuery.data?.studioId;
+  const studioQuery = useQuery({
+    queryKey: ['studios.get', studioId],
+    // The list query already returns the address/neighborhood. Cheap fallback
+    // is to scan the list rather than add a new procedure call.
+    queryFn: () =>
+      api.studios.list().then((r) => r.items.find((s) => s.id === studioId) ?? null),
+    enabled: !!studioId,
+  });
+
+  const createBooking = useMutation({
+    mutationFn: () => {
+      if (!authStore.accessToken()) {
+        throw new ApiError('Sign in via Onboarding first.', 'UNAUTHORIZED', 401);
+      }
+      if (!sessionId) {
+        throw new ApiError('No class selected.', 'BAD_REQUEST', 400);
+      }
+      return api.bookings.create(sessionId, idempotencyKey);
+    },
+    onSuccess: () => setStep('confirm'),
+  });
+
+  if (!sessionId) {
+    return (
+      <div className="grid h-full place-items-center bg-bone p-6 text-center">
+        <div>
+          <p className="font-display text-[20px]">Pick a class first</p>
+          <button
+            onClick={() => goto('discover')}
+            className="mt-3 text-[13px] font-medium text-clay underline"
+          >
+            Browse studios
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (sessionQuery.isLoading || !sessionQuery.data) {
+    return (
+      <div className="grid h-full place-items-center bg-bone p-6 text-center">
+        <p className="text-[14px] text-ink-60">Loading class…</p>
+      </div>
+    );
+  }
+
+  const sess = sessionQuery.data;
+  const display = enrichSession(sess);
+  const startFmt = formatStartsAt(sess.startsAt);
+  const studio = studioQuery.data;
+
   const stepIndex: Record<Step, number> = { class: 1, time: 2, addons: 3, payment: 4, confirm: 5 };
-
-  const total = selected.priceUsd + (addMat ? 3 : 0);
+  const total = priceUsd(sess.price) + (addMat ? 3 : 0);
+  const cancellationHours = 12; // backend's default; surfaced via studios.get when present
 
   const next = () => {
     const order: Step[] = ['class', 'time', 'addons', 'payment', 'confirm'];
     const i = order.indexOf(step);
+    if (step === 'payment') {
+      // Real backend call. Step advances to 'confirm' only if it succeeds.
+      createBooking.mutate();
+      return;
+    }
     if (i < order.length - 1) setStep(order[i + 1]!);
   };
   const back = () => {
@@ -32,6 +112,17 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
     if (i > 0) setStep(order[i - 1]!);
     else goto('studio');
   };
+
+  const errorMessage = (() => {
+    const e = createBooking.error;
+    if (!e) return null;
+    if (e instanceof ApiError) {
+      if (e.code === 'CONFLICT') return 'This class just filled up. Try another time.';
+      if (e.code === 'UNAUTHORIZED') return 'Sign in via Onboarding to confirm a booking.';
+      return e.message;
+    }
+    return 'Something went wrong. Please try again.';
+  })();
 
   return (
     <div className="fade-in relative h-full bg-bone">
@@ -60,54 +151,38 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
       <div className="absolute inset-0 overflow-y-auto pt-[88px] pb-32 scrollbar-none">
         {step === 'class' && (
           <div className="fade-in px-5">
-            <h1 className="font-display text-[28px] leading-tight">Choose a class</h1>
+            <h1 className="font-display text-[28px] leading-tight">Confirm your class</h1>
             <p className="mt-2 text-[13px] text-ink-60">
-              {studio.name} · {studio.neighborhood}
+              {sess.studioName}
+              {studio?.neighborhood ? ` · ${studio.neighborhood}` : ''}
             </p>
-            <ul className="mt-6 space-y-2">
-              {sessions.slice(0, 4).map((s) => (
-                <li key={s.id}>
-                  <button
-                    onClick={() => setSelected(s)}
-                    className={[
-                      'press-soft flex w-full items-center justify-between rounded-2xl border bg-bone p-4 text-start',
-                      selected.id === s.id ? 'border-ink' : 'border-stone',
-                    ].join(' ')}
-                  >
-                    <div>
-                      <div className="text-[15px] font-medium">{s.type} · {s.durationMin}m</div>
-                      <div className="mt-0.5 text-[12px] text-ink-60">
-                        {s.startsAt} · {findInstructor(s.instructorId).fullName}
-                      </div>
-                    </div>
-                    <span className="num text-[15px] font-medium">${s.priceUsd}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="mt-6 rounded-2xl border border-ink bg-bone p-4">
+              <div className="text-[15px] font-medium">
+                {classTypeLabel(sess.type)} · {display.durationMin}m
+              </div>
+              <div className="mt-0.5 text-[12px] text-ink-60">
+                {display.startsAt} · {sess.instructorName ?? 'TBA'}
+              </div>
+              <div className="mt-3 flex items-center justify-between text-[13px]">
+                <span className="text-ink-60">
+                  {Math.max(0, sess.capacity - sess.bookedCount)} of {sess.capacity} seats left
+                </span>
+                <span className="num font-medium">${priceUsd(sess.price)}</span>
+              </div>
+            </div>
           </div>
         )}
 
         {step === 'time' && (
           <div className="fade-in px-5">
-            <h1 className="font-display text-[28px] leading-tight">Choose a time</h1>
+            <h1 className="font-display text-[28px] leading-tight">Confirm the time</h1>
             <p className="mt-2 text-[13px] text-ink-60">
-              {selected.type} with {instructor.fullName}
+              {classTypeLabel(sess.type)} with {sess.instructorName ?? 'TBA'}
             </p>
 
-            <div className="mt-6 grid grid-cols-3 gap-2">
-              {['07:30', '09:00', '12:00', '15:30', '18:00', '19:30'].map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTime(t)}
-                  className={[
-                    'press-soft num h-12 rounded-xl border text-[14px] font-medium transition-colors',
-                    time === t ? 'border-ink bg-ink text-bone' : 'border-stone bg-bone text-ink hover:bg-stone-soft',
-                  ].join(' ')}
-                >
-                  {t}
-                </button>
-              ))}
+            <div className="mt-6 rounded-2xl border border-ink bg-bone p-5 text-center">
+              <div className="font-display text-[26px]">{startFmt.time}</div>
+              <div className="mt-1 text-[13px] text-ink-60">{startFmt.date}</div>
             </div>
 
             <div className="mt-7 rounded-2xl border border-stone bg-bone p-4">
@@ -116,8 +191,8 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
                 Cancellation policy
               </div>
               <p className="mt-1 text-[13px] leading-[1.55] text-ink-60">
-                Free cancellation up to {studio.cancellationHours} hours before class. After that the
-                session counts toward your monthly cap and isn’t refundable.
+                Free cancellation up to {cancellationHours} hours before class. After that the
+                session counts toward your monthly cap and isn&apos;t refundable.
               </p>
             </div>
           </div>
@@ -165,7 +240,7 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
                       <span className="text-[13px] text-ink-60">Included</span>
                     </div>
                     <p className="mt-1 text-[13px] text-ink-60">
-                      Already part of your booking at {studio.name}.
+                      Already part of your booking at {sess.studioName}.
                     </p>
                   </div>
                 </div>
@@ -209,7 +284,9 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
                           sel ? 'border-ink bg-ink' : 'border-stone',
                         ].join(' ')}
                       >
-                        {sel ? <span className="block h-full w-full rounded-full ring-2 ring-bone ring-inset" /> : null}
+                        {sel ? (
+                          <span className="block h-full w-full rounded-full ring-2 ring-bone ring-inset" />
+                        ) : null}
                       </span>
                     </button>
                   </li>
@@ -221,8 +298,10 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
               <div className="label-eyebrow">Order</div>
               <ul className="mt-3 space-y-2.5 text-[14px]">
                 <li className="flex justify-between">
-                  <span>{selected.type} · {selected.durationMin}m</span>
-                  <span className="num">${selected.priceUsd}.00</span>
+                  <span>
+                    {classTypeLabel(sess.type)} · {display.durationMin}m
+                  </span>
+                  <span className="num">${priceUsd(sess.price)}.00</span>
                 </li>
                 {addMat && (
                   <li className="flex justify-between">
@@ -236,8 +315,17 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
                 </li>
               </ul>
               <p className="mt-4 text-[12px] leading-[1.5] text-ink-60">
-                Charged on confirmation. Free to cancel up to {studio.cancellationHours} hours before class — full refund.
+                Charged on confirmation. Free to cancel up to {cancellationHours} hours before class
+                — full refund.
               </p>
+              {errorMessage && (
+                <p
+                  role="alert"
+                  className="mt-3 rounded-md border border-terracotta/40 bg-terracotta/10 p-3 text-[13px] text-terracotta"
+                >
+                  {errorMessage}
+                </p>
+              )}
             </section>
           </div>
         )}
@@ -245,7 +333,10 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
         {step === 'confirm' && (
           <div className="fade-in flex h-full flex-col px-5 pt-2">
             <div className="flex justify-end pt-4">
-              <button onClick={() => goto('discover')} className="text-[13px] font-medium text-ink-60 underline underline-offset-4">
+              <button
+                onClick={() => goto('discover')}
+                className="text-[13px] font-medium text-ink-60 underline underline-offset-4"
+              >
                 Done
               </button>
             </div>
@@ -254,46 +345,47 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
                 <Check size={28} strokeWidth={2} />
               </div>
               <h1 className="font-display mt-7 text-center text-[30px] leading-tight">
-                You’re booked.
+                You&apos;re booked.
               </h1>
               <p className="mt-2 text-center text-[14px] text-ink-60">
-                We just sent the details to you on WhatsApp.
+                We&apos;ll send the details to your phone shortly.
               </p>
             </div>
 
             <div className="mt-9 rounded-2xl bg-sand p-5">
               <div className="label-eyebrow">Confirmed</div>
-              <h3 className="font-display mt-1 text-[22px]">{selected.type} with {instructor.fullName.split(' ')[0]}</h3>
+              <h3 className="font-display mt-1 text-[22px]">
+                {classTypeLabel(sess.type)} with {(sess.instructorName ?? 'TBA').split(' ')[0]}
+              </h3>
               <ul className="mt-4 space-y-2.5 text-[14px]">
                 <li className="flex items-start gap-3">
                   <Clock size={14} className="mt-1 text-ink-60" />
-                  <span>Tomorrow, May 2 · <span className="num font-medium">{time}</span> — {selected.durationMin} min</span>
+                  <span>
+                    {startFmt.date} · <span className="num font-medium">{startFmt.time}</span> —{' '}
+                    {display.durationMin} min
+                  </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <MapPin size={14} className="mt-1 text-ink-60" />
-                  <span>{studio.name} · <span className="text-ink-60">{studio.address}</span></span>
+                  <span>
+                    {sess.studioName}
+                    {studio?.address ? (
+                      <>
+                        {' '}
+                        · <span className="text-ink-60">{studio.address}</span>
+                      </>
+                    ) : null}
+                  </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CreditCard size={14} className="mt-1 text-ink-60" />
-                  <span>{pay === 'card' ? 'Charged $' : 'To pay at studio: $'}<span className="num">{total}.00</span></span>
+                  <span>
+                    {pay === 'card' ? 'Charged $' : 'To pay at studio: $'}
+                    <span className="num">{total}.00</span>
+                  </span>
                 </li>
               </ul>
             </div>
-
-            <section className="mt-7">
-              <div className="label-eyebrow">What happens next</div>
-              <ul className="mt-3 space-y-3 text-[13px] text-ink/85">
-                <Step n="1" title="WhatsApp reminder">
-                  We’ll message you 24 hours and 60 minutes before class.
-                </Step>
-                <Step n="2" title="Arrive 10 minutes early">
-                  Your name is on the list. The desk has your mat.
-                </Step>
-                <Step n="3" title="After class">
-                  Rate the session and rebook in one tap.
-                </Step>
-              </ul>
-            </section>
 
             <div className="mt-8 flex gap-2">
               <Button variant="tertiary" block onClick={() => goto('bookings')}>
@@ -312,31 +404,28 @@ export function Booking({ goto }: { goto: (id: ScreenId) => void }) {
         <StickyCTA
           info={
             step === 'payment' ? (
-              <span>Total <span className="num font-medium text-ink">${total}.00</span> · {pay === 'card' ? 'Card' : 'Pay at studio'}</span>
+              <span>
+                Total <span className="num font-medium text-ink">${total}.00</span> ·{' '}
+                {pay === 'card' ? 'Card' : 'Pay at studio'}
+              </span>
             ) : (
-              <span>{selected.type} · <span className="num">{step === 'time' ? time : selected.startsAt}</span> · ${selected.priceUsd}</span>
+              <span>
+                {classTypeLabel(sess.type)} ·{' '}
+                <span className="num">{step === 'time' ? startFmt.time : display.startsAt}</span> · $
+                {priceUsd(sess.price)}
+              </span>
             )
           }
         >
-          <Button block onClick={next}>
-            {step === 'payment' ? 'Confirm and pay' : 'Continue'}
+          <Button block onClick={next} disabled={createBooking.isPending}>
+            {createBooking.isPending
+              ? 'Confirming…'
+              : step === 'payment'
+                ? 'Confirm and pay'
+                : 'Continue'}
           </Button>
         </StickyCTA>
       )}
     </div>
-  );
-}
-
-function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
-  return (
-    <li className="flex gap-3">
-      <span className="mt-0.5 grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-sand text-[12px] font-medium num">
-        {n}
-      </span>
-      <div>
-        <div className="text-[13.5px] font-medium">{title}</div>
-        <div className="text-[13px] text-ink-60">{children}</div>
-      </div>
-    </li>
   );
 }

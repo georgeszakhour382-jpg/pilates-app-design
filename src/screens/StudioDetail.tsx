@@ -1,28 +1,111 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Heart, Share2, Star, MapPin, Clock } from 'lucide-react';
 import { Chip } from '../components/ui/Chip';
 import { Button } from '../components/ui/Button';
 import { StickyCTA } from '../components/ui/StickyCTA';
 import { ClassRow } from '../components/shared/ClassRow';
 import { InstructorBadge } from '../components/shared/InstructorBadge';
-import { instructors, reviews, sessions, studios } from '../data/mock';
+import { reviews as mockReviews } from '../data/mock';
 import type { ScreenId } from '../App';
+import { api } from '../lib/api';
+import {
+  enrichSession,
+  enrichStudio,
+  instructorFromSession,
+  nextDayLabels,
+} from '../lib/displayAdapters';
 
-const days = ['Today', 'Tomorrow', 'Thu 4', 'Fri 5', 'Sat 6', 'Sun 7', 'Mon 8'];
+export function StudioDetail({
+  goto,
+  slug,
+  setActiveSessionId,
+}: {
+  goto: (id: ScreenId) => void;
+  slug: string | null;
+  setActiveSessionId?: (id: string | null) => void;
+}) {
+  const studioQuery = useQuery({
+    queryKey: ['studios.getBySlug', slug],
+    queryFn: () => {
+      if (!slug) throw new Error('No studio selected');
+      return api.studios.getBySlug(slug);
+    },
+    enabled: !!slug,
+  });
 
-export function StudioDetail({ goto }: { goto: (id: ScreenId) => void }) {
-  const studio = studios[0]!;
-  const studioInstructors = instructors.filter((i) => i.studioId === studio.id);
-  const studioSessions = sessions.filter((s) => s.studioId === studio.id);
-  const [day, setDay] = useState('Tomorrow');
+  // Day picker — next 7 days, Beirut-local. The query fetches the whole
+  // 7-day window from the backend; the picker is purely a client filter.
+  const days = useMemo(() => nextDayLabels(7), []);
+  const [activeDayIso, setActiveDayIso] = useState(days[1]?.iso ?? days[0]?.iso ?? '');
+
+  const fromIso = days[0]?.iso ? `${days[0].iso}T00:00:00.000Z` : new Date().toISOString();
+  const toIso = days[days.length - 1]?.iso
+    ? `${days[days.length - 1]!.iso}T23:59:59.999Z`
+    : new Date().toISOString();
+
+  const sessionsQuery = useQuery({
+    queryKey: ['classes.list', studioQuery.data?.id, fromIso, toIso],
+    queryFn: () => {
+      if (!studioQuery.data) throw new Error('Studio not loaded yet');
+      return api.classes.list({ studioId: studioQuery.data.id, from: fromIso, to: toIso });
+    },
+    enabled: !!studioQuery.data,
+  });
+
+  const sessionsForDay = useMemo(() => {
+    const all = sessionsQuery.data ?? [];
+    return all
+      .filter((s) => s.status === 'SCHEDULED')
+      .filter((s) => s.startsAt.slice(0, 10) === activeDayIso)
+      .sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1));
+  }, [sessionsQuery.data, activeDayIso]);
+
+  if (studioQuery.isLoading) {
+    return (
+      <div className="grid h-full place-items-center bg-bone p-6 text-center">
+        <p className="text-[14px] text-ink-60">Loading studio…</p>
+      </div>
+    );
+  }
+
+  if (studioQuery.error || !studioQuery.data) {
+    return (
+      <div className="grid h-full place-items-center bg-bone p-6 text-center">
+        <div>
+          <p className="font-display text-[20px]">Studio not found</p>
+          <button
+            onClick={() => goto('discover')}
+            className="mt-3 text-[13px] font-medium text-clay underline"
+          >
+            Back to Discover
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const studio = enrichStudio(studioQuery.data);
+
+  // Find the next upcoming class for the sticky CTA
+  const nextSession = (sessionsQuery.data ?? [])
+    .filter((s) => s.status === 'SCHEDULED' && new Date(s.startsAt).getTime() > Date.now())
+    .sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1))[0];
 
   return (
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-32 scrollbar-none">
         {/* Hero */}
         <div className="relative aspect-[4/5] w-full">
-          <img src={studio.hero} alt={studio.name} className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-x-0 bottom-0 h-1/3" style={{ background: 'linear-gradient(to top, rgba(31,27,22,0.6) 0%, transparent 100%)' }} />
+          <img
+            src={studio.hero}
+            alt={studio.name}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div
+            className="absolute inset-x-0 bottom-0 h-1/3"
+            style={{ background: 'linear-gradient(to top, rgba(31,27,22,0.6) 0%, transparent 100%)' }}
+          />
           <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-12">
             <button
               onClick={() => goto('discover')}
@@ -54,7 +137,9 @@ export function StudioDetail({ goto }: { goto: (id: ScreenId) => void }) {
 
         {/* Header block */}
         <div className="px-5 pt-6">
-          <div className="label-eyebrow">{studio.neighborhood} · {studio.city}</div>
+          <div className="label-eyebrow">
+            {studio.neighborhood} · {studio.city}
+          </div>
           <h1 className="font-display mt-1 text-[32px] leading-tight">{studio.name}</h1>
           <p className="mt-3 text-[15px] leading-[1.55] text-ink-60">{studio.blurb}</p>
 
@@ -67,7 +152,7 @@ export function StudioDetail({ goto }: { goto: (id: ScreenId) => void }) {
             <span className="h-3 w-px bg-stone" />
             <span className="flex items-center gap-1.5">
               <MapPin size={14} />
-              7 min walk
+              {studio.address}
             </span>
           </div>
 
@@ -84,7 +169,7 @@ export function StudioDetail({ goto }: { goto: (id: ScreenId) => void }) {
         <section className="mt-8 mx-5 rounded-2xl bg-sand p-5">
           <div className="label-eyebrow">Why we love this studio</div>
           <p className="font-display mt-2 text-[18px] italic leading-[1.4]">
-            “{studio.loved}”
+            &ldquo;{studio.loved}&rdquo;
           </p>
         </section>
 
@@ -97,39 +182,49 @@ export function StudioDetail({ goto }: { goto: (id: ScreenId) => void }) {
           <div className="sticky top-0 z-10 mt-3 -mx-0 bg-bone/95 backdrop-blur-sm">
             <div className="flex gap-2 overflow-x-auto px-5 py-2 scrollbar-none">
               {days.map((d) => (
-                <Chip key={d} selected={day === d} onClick={() => setDay(d)}>
-                  {d}
+                <Chip
+                  key={d.iso}
+                  selected={activeDayIso === d.iso}
+                  onClick={() => setActiveDayIso(d.iso)}
+                >
+                  {d.label}
                 </Chip>
               ))}
             </div>
             <div className="h-px bg-stone/70" />
           </div>
+          {sessionsQuery.isLoading && (
+            <p className="mt-4 px-5 text-[13px] text-ink-60">Loading classes…</p>
+          )}
+          {sessionsQuery.error && (
+            <p className="mt-4 px-5 text-[13px] text-terracotta">
+              Couldn&apos;t load schedule.
+            </p>
+          )}
+          {!sessionsQuery.isLoading && sessionsForDay.length === 0 && (
+            <p className="mt-4 px-5 text-[13px] text-ink-60">No classes on this day.</p>
+          )}
           <ul className="mt-3 space-y-2 px-5">
-            {studioSessions.map((s) => {
-              const inst = instructors.find((i) => i.id === s.instructorId)!;
+            {sessionsForDay.map((s) => {
+              const session = enrichSession(s);
+              const inst = instructorFromSession(s);
               return (
                 <li key={s.id}>
-                  <ClassRow session={s} instructor={inst} onClick={() => goto('booking')} />
+                  <ClassRow
+                    session={session}
+                    instructor={inst}
+                    onClick={() => {
+                      setActiveSessionId?.(s.id);
+                      goto('booking');
+                    }}
+                  />
                 </li>
               );
             })}
           </ul>
         </section>
 
-        {/* Instructors */}
-        <section className="mt-9 px-5">
-          <div className="label-eyebrow">Teaching here</div>
-          <h2 className="font-display mt-1 text-[22px]">Instructors</h2>
-          <ul className="mt-4 space-y-4">
-            {studioInstructors.map((i) => (
-              <li key={i.id}>
-                <InstructorBadge instructor={i} onClick={() => goto('instructor')} />
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Reviews */}
+        {/* Reviews — mock until backend exposes a Review model */}
         <section className="mt-9 px-5">
           <div className="flex items-baseline justify-between">
             <div>
@@ -139,7 +234,7 @@ export function StudioDetail({ goto }: { goto: (id: ScreenId) => void }) {
             <button className="text-[12px] font-medium text-ink-60">See all</button>
           </div>
           <ul className="mt-4 space-y-5">
-            {reviews.map((r) => (
+            {mockReviews.map((r) => (
               <li key={r.id} className="border-b border-stone/70 pb-5 last:border-b-0">
                 <div className="flex items-center justify-between">
                   <span className="text-[14px] font-medium">{r.author}</span>
@@ -147,7 +242,11 @@ export function StudioDetail({ goto }: { goto: (id: ScreenId) => void }) {
                 </div>
                 <div className="mt-1 flex items-center gap-1">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} size={12} className={i < r.rating ? 'fill-ink stroke-ink' : 'stroke-ink-30'} />
+                    <Star
+                      key={i}
+                      size={12}
+                      className={i < r.rating ? 'fill-ink stroke-ink' : 'stroke-ink-30'}
+                    />
                   ))}
                 </div>
                 <p className="mt-2 text-[14px] leading-[1.55] text-ink/85">{r.body}</p>
@@ -156,41 +255,15 @@ export function StudioDetail({ goto }: { goto: (id: ScreenId) => void }) {
           </ul>
         </section>
 
-        {/* Map placeholder */}
-        <section className="mt-9 px-5">
-          <div className="label-eyebrow">Find it</div>
-          <h2 className="font-display mt-1 text-[22px]">{studio.address}</h2>
-          <div
-            className="mt-3 aspect-[16/10] overflow-hidden rounded-2xl"
-            style={{
-              background:
-                'radial-gradient(circle at 30% 30%, #ede5d8 0%, #d6cfc2 60%, #c5bdb0 100%)',
-            }}
-          >
-            <div className="relative h-full w-full">
-              <div className="absolute inset-0 opacity-50" style={{
-                backgroundImage:
-                  'linear-gradient(transparent 95%, rgba(31,27,22,0.07) 95%), linear-gradient(90deg, transparent 95%, rgba(31,27,22,0.07) 95%)',
-                backgroundSize: '32px 32px',
-              }} />
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                <div className="grid h-9 w-9 place-items-center rounded-full bg-clay text-bone shadow-md">
-                  <MapPin size={16} />
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Cancellation copy */}
+        {/* Cancellation */}
         <section className="mt-7 mx-5 rounded-2xl border border-stone p-4">
           <div className="flex items-center gap-2 text-[13px] font-medium">
             <Clock size={14} />
             Cancellation
           </div>
           <p className="mt-1 text-[13px] leading-[1.55] text-ink-60">
-            Free cancellation up to {studio.cancellationHours} hours before class. After that, the class
-            counts toward your monthly cap and isn’t refundable.
+            Free cancellation up to {studio.cancellationHours} hours before class. After that, the
+            class counts toward your monthly cap and isn&apos;t refundable.
           </p>
         </section>
 
@@ -199,16 +272,34 @@ export function StudioDetail({ goto }: { goto: (id: ScreenId) => void }) {
 
       <StickyCTA
         info={
-          <span>
-            Next class · <span className="font-medium text-ink">Tomorrow 09:00</span> · from $
-            <span className="num">{studio.priceFrom}</span>
-          </span>
+          nextSession ? (
+            <span>
+              Next class · <span className="font-medium text-ink">{enrichSession(nextSession).startsAt}</span> · from $
+              <span className="num">{studio.priceFrom}</span>
+            </span>
+          ) : (
+            <span>No upcoming classes</span>
+          )
         }
       >
-        <Button block onClick={() => goto('booking')}>
+        <Button
+          block
+          onClick={() => {
+            const target =
+              sessionsForDay[0] ?? (sessionsQuery.data ?? []).find((s) => s.status === 'SCHEDULED');
+            if (target) {
+              setActiveSessionId?.(target.id);
+              goto('booking');
+            }
+          }}
+        >
           Book a class
         </Button>
       </StickyCTA>
     </div>
   );
 }
+
+// Suppress unused-import warning for InstructorBadge — kept for future
+// "instructors teaching here" section once a public instructors query lands.
+void InstructorBadge;

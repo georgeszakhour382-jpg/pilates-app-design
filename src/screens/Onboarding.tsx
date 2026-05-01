@@ -1,6 +1,10 @@
 import { useState } from 'react';
-import { ArrowRight, MapPin, User, Sparkles } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { ArrowRight, Phone, User, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import type { ScreenId } from '../App';
+import { api, ApiError } from '../lib/api';
+import { authStore } from '../lib/auth';
 
 const slides = [
   {
@@ -22,20 +26,35 @@ const slides = [
 ];
 
 type Role = 'client' | 'instructor';
+type Step = 0 | 1 | 2 | 'phone' | 'code';
 
-export function Onboarding() {
-  const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
+const PHONE_RE = /^\+961\d{7,8}$/;
+
+export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
+  const [step, setStep] = useState<Step>(0);
   const [role, setRole] = useState<Role | null>(null);
+  const [phone, setPhone] = useState('+96170000001');
+  const [code, setCode] = useState('');
 
+  const sendOtp = useMutation({
+    mutationFn: (p: string) => api.auth.sendOtp(p),
+    onSuccess: () => setStep('code'),
+  });
+
+  const verifyOtp = useMutation({
+    mutationFn: ({ p, c }: { p: string; c: string }) => api.auth.verifyOtp(p, c),
+    onSuccess: (session) => {
+      authStore.save(session);
+      goto('discover');
+    },
+  });
+
+  // Marketing slides
   if (step === 0 || step === 1) {
     const slide = slides[step]!;
     return (
       <div className="fade-in relative h-full bg-bone">
-        <img
-          src={slide.image}
-          alt=""
-          className="absolute inset-0 h-[62%] w-full object-cover"
-        />
+        <img src={slide.image} alt="" className="absolute inset-0 h-[62%] w-full object-cover" />
         <div
           className="absolute inset-x-0 top-[55%] h-[12%]"
           style={{
@@ -62,7 +81,7 @@ export function Onboarding() {
           <div className="mt-auto pt-6">
             <Button
               block
-              onClick={() => setStep(((step + 1) as 0 | 1 | 2))}
+              onClick={() => setStep(step === 0 ? 1 : 2)}
               trailing={<ArrowRight size={18} />}
             >
               {step === 0 ? 'Continue' : 'Sounds good'}
@@ -73,31 +92,35 @@ export function Onboarding() {
     );
   }
 
+  // Role choice
   if (step === 2) {
     return (
       <div className="fade-in flex h-full flex-col bg-bone px-6 pt-16 pb-10">
         <div className="label-eyebrow">Welcome</div>
         <h1 className="font-display mt-3 text-[32px] leading-[1.1]">
-          Are you here to <em className="italic">practice</em>, or to <em className="italic">teach</em>?
+          Are you here to <em className="italic">practice</em>, or to{' '}
+          <em className="italic">teach</em>?
         </h1>
         <p className="mt-3 text-[14px] text-ink-60">
           You can switch later. We just want to show you the right thing first.
         </p>
         <div className="mt-8 space-y-3">
-          {([
-            {
-              id: 'client' as const,
-              icon: User,
-              title: 'Practising',
-              body: 'Find studios, book classes, track sessions.',
-            },
-            {
-              id: 'instructor' as const,
-              icon: Sparkles,
-              title: 'Teaching',
-              body: 'Manage your schedule, students and earnings.',
-            },
-          ]).map((opt) => {
+          {(
+            [
+              {
+                id: 'client' as const,
+                icon: User,
+                title: 'Practising',
+                body: 'Find studios, book classes, track sessions.',
+              },
+              {
+                id: 'instructor' as const,
+                icon: Sparkles,
+                title: 'Teaching',
+                body: 'Manage your schedule, students and earnings.',
+              },
+            ]
+          ).map((opt) => {
             const Icon = opt.icon;
             const selected = role === opt.id;
             return (
@@ -121,7 +144,12 @@ export function Onboarding() {
                 </div>
                 <div>
                   <div className="text-[16px] font-medium">{opt.title}</div>
-                  <div className={['mt-0.5 text-[13px]', selected ? 'text-bone/70' : 'text-ink-60'].join(' ')}>
+                  <div
+                    className={[
+                      'mt-0.5 text-[13px]',
+                      selected ? 'text-bone/70' : 'text-ink-60',
+                    ].join(' ')}
+                  >
                     {opt.body}
                   </div>
                 </div>
@@ -130,7 +158,7 @@ export function Onboarding() {
           })}
         </div>
         <div className="mt-auto pt-6">
-          <Button block disabled={!role} onClick={() => setStep(3)}>
+          <Button block disabled={!role} onClick={() => setStep('phone')}>
             Continue
           </Button>
         </div>
@@ -138,35 +166,105 @@ export function Onboarding() {
     );
   }
 
-  // step === 3 — location permission
+  // Phone entry
+  if (step === 'phone') {
+    const phoneOk = PHONE_RE.test(phone.trim());
+    return (
+      <div className="fade-in flex h-full flex-col bg-bone px-6 pt-16 pb-10">
+        <div className="grid h-16 w-16 place-items-center rounded-full bg-sand">
+          <Phone size={26} strokeWidth={1.6} />
+        </div>
+        <h1 className="font-display mt-7 text-[30px] leading-[1.1]">What&apos;s your number?</h1>
+        <p className="mt-3 text-[15px] leading-[1.55] text-ink-60">
+          We&apos;ll text you a 6-digit code. No password to remember.
+        </p>
+
+        <label className="mt-7 block">
+          <span className="label-eyebrow">Mobile</span>
+          <input
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+96170123456"
+            className="num mt-2 h-12 w-full rounded-xl border border-stone bg-bone px-4 text-[16px] focus:border-ink focus:outline-none"
+          />
+          <span className="mt-1.5 block text-[12px] text-ink-60">
+            Lebanon only · format <span className="num">+961…</span>
+          </span>
+        </label>
+
+        {sendOtp.error && (
+          <p
+            role="alert"
+            className="mt-4 rounded-md border border-terracotta/40 bg-terracotta/10 p-3 text-[13px] text-terracotta"
+          >
+            {sendOtp.error instanceof ApiError ? sendOtp.error.message : 'Something went wrong.'}
+          </p>
+        )}
+
+        <div className="mt-auto space-y-3 pt-6">
+          <Button
+            block
+            disabled={!phoneOk || sendOtp.isPending}
+            onClick={() => sendOtp.mutate(phone.trim())}
+          >
+            {sendOtp.isPending ? 'Sending…' : 'Send code'}
+          </Button>
+          <Button block variant="ghost" onClick={() => goto('discover')}>
+            Browse without an account
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // OTP code entry
   return (
     <div className="fade-in flex h-full flex-col bg-bone px-6 pt-16 pb-10">
-      <div className="grid h-16 w-16 place-items-center rounded-full bg-sand">
-        <MapPin size={26} strokeWidth={1.6} />
-      </div>
-      <h1 className="font-display mt-7 text-[30px] leading-[1.1]">
-        Show studios near you?
-      </h1>
+      <div className="label-eyebrow">Code sent to</div>
+      <div className="num mt-1 text-[14px] font-medium">{phone}</div>
+      <h1 className="font-display mt-5 text-[30px] leading-[1.1]">Enter the 6-digit code</h1>
       <p className="mt-3 text-[15px] leading-[1.55] text-ink-60">
-        We use your location only to surface studios within 15 minutes of you, and to estimate travel time.
-        Nothing is shared with studios or instructors.
+        Local-dev mode accepts <span className="num font-medium">123456</span> for any phone.
       </p>
 
-      <div className="mt-6 space-y-2 text-[13px] text-ink-60">
-        <div className="flex gap-2">
-          <span className="mt-2 h-1 w-1 rounded-full bg-ink-30" />
-          <span>You can change this any time in Settings.</span>
-        </div>
-        <div className="flex gap-2">
-          <span className="mt-2 h-1 w-1 rounded-full bg-ink-30" />
-          <span>We never share precise location with anyone.</span>
-        </div>
-      </div>
+      <label className="mt-7 block">
+        <span className="label-eyebrow">Code</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          placeholder="••••••"
+          className="num mt-2 h-14 w-full rounded-xl border border-stone bg-bone px-4 text-center text-[26px] tracking-[0.6em] focus:border-ink focus:outline-none"
+        />
+      </label>
+
+      {verifyOtp.error && (
+        <p
+          role="alert"
+          className="mt-4 rounded-md border border-terracotta/40 bg-terracotta/10 p-3 text-[13px] text-terracotta"
+        >
+          {verifyOtp.error instanceof ApiError
+            ? verifyOtp.error.message
+            : 'Could not verify the code.'}
+        </p>
+      )}
 
       <div className="mt-auto space-y-3 pt-6">
-        <Button block>Allow while using the app</Button>
-        <Button block variant="ghost">
-          Choose city manually
+        <Button
+          block
+          disabled={code.length !== 6 || verifyOtp.isPending}
+          onClick={() => verifyOtp.mutate({ p: phone.trim(), c: code })}
+        >
+          {verifyOtp.isPending ? 'Verifying…' : 'Verify and continue'}
+        </Button>
+        <Button block variant="ghost" onClick={() => setStep('phone')}>
+          Use a different number
         </Button>
       </div>
     </div>
