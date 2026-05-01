@@ -100,11 +100,23 @@ export function Booking({
     const order: Step[] = ['class', 'time', 'addons', 'payment', 'confirm'];
     const i = order.indexOf(step);
     if (step === 'payment') {
+      // Auth gate: if no session, route to Onboarding and remember to come
+      // back here on success rather than firing a doomed mutation.
+      if (!authStore.accessToken()) {
+        window.localStorage.setItem('pilates:postAuthRedirect', 'booking');
+        goto('onboarding');
+        return;
+      }
       // Real backend call. Step advances to 'confirm' only if it succeeds.
       createBooking.mutate();
       return;
     }
     if (i < order.length - 1) setStep(order[i + 1]!);
+  };
+
+  const goSignIn = () => {
+    window.localStorage.setItem('pilates:postAuthRedirect', 'booking');
+    goto('onboarding');
   };
   const back = () => {
     const order: Step[] = ['class', 'time', 'addons', 'payment', 'confirm'];
@@ -113,12 +125,25 @@ export function Booking({
     else goto('studio');
   };
 
+  const errorCode = createBooking.error instanceof ApiError ? createBooking.error.code : null;
   const errorMessage = (() => {
     const e = createBooking.error;
     if (!e) return null;
     if (e instanceof ApiError) {
       if (e.code === 'CONFLICT') return 'This class just filled up. Try another time.';
       if (e.code === 'UNAUTHORIZED') return 'Sign in via Onboarding to confirm a booking.';
+      // Catch backend unique-constraint failures (Prisma P2002 on
+      // (customerId, classSessionId)) so the raw stack never reaches the
+      // UI. Both the message and the bare error string get matched here
+      // because the backend currently surfaces the Prisma error verbatim.
+      const msg = e.message ?? '';
+      if (
+        /Unique constraint/.test(msg) ||
+        /already booked/i.test(msg) ||
+        /classSessionId/.test(msg)
+      ) {
+        return "You've already booked this class.";
+      }
       return e.message;
     }
     return 'Something went wrong. Please try again.';
@@ -318,13 +343,23 @@ export function Booking({
                 Charged on confirmation. Free to cancel up to {cancellationHours} hours before class
                 — full refund.
               </p>
-              {errorMessage && (
+              {errorMessage && errorCode !== 'UNAUTHORIZED' && (
                 <p
                   role="alert"
                   className="mt-3 rounded-md border border-terracotta/40 bg-terracotta/10 p-3 text-[13px] text-terracotta"
                 >
                   {errorMessage}
                 </p>
+              )}
+              {errorCode === 'UNAUTHORIZED' && (
+                <button
+                  type="button"
+                  onClick={goSignIn}
+                  className="press-soft mt-3 flex w-full items-center justify-between rounded-md border border-ink bg-bone p-3 text-start text-[13px] font-medium text-ink"
+                >
+                  <span>Sign in via Onboarding to confirm a booking.</span>
+                  <span aria-hidden>→</span>
+                </button>
               )}
             </section>
           </div>

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   ChevronRight,
@@ -9,34 +10,65 @@ import {
   ShieldCheck,
   LogOut,
   UserPlus,
+  Check,
 } from 'lucide-react';
 import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
 import { Button } from '../components/ui/Button';
+import { Sheet } from '../components/ui/Sheet';
+import { useToast } from '../components/ui/Toast';
 import { api } from '../lib/api';
 import { authStore } from '../lib/auth';
 
+type RowId = 'pay' | 'lang' | 'city' | 'notif' | 'priv' | 'help';
+
 interface Row {
-  id: string;
+  id: RowId;
   label: string;
-  hint?: string;
+  hint: string;
   icon: typeof Bell;
 }
 
-const account: Row[] = [
-  { id: 'pay', label: 'Payment methods', hint: 'Visa · Apple Pay', icon: CreditCard },
-  { id: 'lang', label: 'Language', hint: 'English', icon: Languages },
-  { id: 'city', label: 'City', hint: 'Beirut', icon: Globe },
-  { id: 'notif', label: 'Notifications', hint: 'WhatsApp + Push', icon: Bell },
-];
+const LANG_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'ar', label: 'العربية' },
+  { value: 'fr', label: 'Français' },
+] as const;
 
-const support: Row[] = [
-  { id: 'priv', label: 'Privacy & data', icon: ShieldCheck },
-  { id: 'help', label: 'Help', icon: HelpCircle },
-];
+const CITY_OPTIONS = ['Beirut', 'Jounieh', 'Tripoli', 'Saida', 'Tyre', 'Zahlé', 'Byblos'];
+
+type LangValue = (typeof LANG_OPTIONS)[number]['value'];
+
+function readPref<T extends string>(key: string, fallback: T): T {
+  const v = window.localStorage.getItem(key);
+  return (v as T) || fallback;
+}
 
 export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
   const signedIn = !!authStore.accessToken();
+  const toast = useToast();
+
+  const [openSheet, setOpenSheet] = useState<RowId | null>(null);
+  const [lang, setLang] = useState<LangValue>(() => readPref<LangValue>('pilates:lang', 'en'));
+  const [city, setCity] = useState<string>(() => readPref<string>('pilates:city', 'Beirut'));
+  const [notifWA, setNotifWA] = useState<boolean>(
+    () => (window.localStorage.getItem('pilates:notif:whatsapp') ?? '1') === '1',
+  );
+  const [notifPush, setNotifPush] = useState<boolean>(
+    () => (window.localStorage.getItem('pilates:notif:push') ?? '1') === '1',
+  );
+
+  // Persist preference changes immediately.
+  useEffect(() => window.localStorage.setItem('pilates:lang', lang), [lang]);
+  useEffect(() => window.localStorage.setItem('pilates:city', city), [city]);
+  useEffect(
+    () => window.localStorage.setItem('pilates:notif:whatsapp', notifWA ? '1' : '0'),
+    [notifWA],
+  );
+  useEffect(
+    () => window.localStorage.setItem('pilates:notif:push', notifPush ? '1' : '0'),
+    [notifPush],
+  );
 
   const meQuery = useQuery({
     queryKey: ['auth.me'],
@@ -107,6 +139,48 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
     [...(upcomingQuery.data?.items ?? []), ...(pastQuery.data?.items ?? [])].map((b) => b.studioId),
   ).size;
 
+  const langLabel = LANG_OPTIONS.find((o) => o.value === lang)?.label ?? 'English';
+  const notifChannels = [notifWA && 'WhatsApp', notifPush && 'Push'].filter(Boolean).join(' + ') ||
+    'Off';
+
+  const account: Row[] = [
+    { id: 'pay', label: 'Payment methods', hint: 'Cash · card via studio', icon: CreditCard },
+    { id: 'lang', label: 'Language', hint: langLabel, icon: Languages },
+    { id: 'city', label: 'City', hint: city, icon: Globe },
+    { id: 'notif', label: 'Notifications', hint: notifChannels, icon: Bell },
+  ];
+  const support: Row[] = [
+    { id: 'priv', label: 'Privacy & data', hint: '', icon: ShieldCheck },
+    { id: 'help', label: 'Help', hint: '', icon: HelpCircle },
+  ];
+
+  const exportMine = async () => {
+    try {
+      const data = (await fetch('/api/trpc/privacy.exportMine', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authStore.accessToken() ?? ''}`,
+        },
+        body: '{}',
+      }).then((r) => r.json())) as { result?: { data?: unknown } };
+      const blob = new Blob([JSON.stringify(data.result?.data ?? data, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pilates-data-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.show('Your data export is downloading.');
+    } catch {
+      toast.show("Couldn't export — try again.", 'warn');
+    }
+  };
+
   return (
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
@@ -155,8 +229,8 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
         </section>
 
         {/* Account list */}
-        <List title="Account" rows={account} />
-        <List title="Support" rows={support} />
+        <List title="Account" rows={account} onOpen={(id) => setOpenSheet(id)} />
+        <List title="Support" rows={support} onOpen={(id) => setOpenSheet(id)} />
 
         <div className="mt-9 px-5">
           <button
@@ -175,6 +249,173 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
       </div>
 
       <BottomNav active="profile" onSelect={goto} />
+
+      {/* Sheets — one per setting row. Kept inside the screen so the phone-frame
+          containment styling applies. */}
+      <Sheet
+        open={openSheet === 'lang'}
+        title="Language"
+        onClose={() => setOpenSheet(null)}
+      >
+        <ul className="space-y-2">
+          {LANG_OPTIONS.map((opt) => {
+            const sel = lang === opt.value;
+            return (
+              <li key={opt.value}>
+                <button
+                  onClick={() => {
+                    setLang(opt.value);
+                    setOpenSheet(null);
+                    toast.show(`Language set to ${opt.label}.`);
+                  }}
+                  className={[
+                    'press-soft flex w-full items-center justify-between rounded-2xl border bg-bone px-4 py-3 text-start',
+                    sel ? 'border-ink' : 'border-stone',
+                  ].join(' ')}
+                >
+                  <span className="text-[15px] font-medium">{opt.label}</span>
+                  {sel && <Check size={16} />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-4 text-[12px] text-ink-60">
+          Saved on this device. UI translation arrives in a follow-up — currently changes the
+          stored preference only.
+        </p>
+      </Sheet>
+
+      <Sheet open={openSheet === 'city'} title="City" onClose={() => setOpenSheet(null)}>
+        <ul className="space-y-2">
+          {CITY_OPTIONS.map((c) => {
+            const sel = city === c;
+            return (
+              <li key={c}>
+                <button
+                  onClick={() => {
+                    setCity(c);
+                    setOpenSheet(null);
+                    toast.show(`City set to ${c}.`);
+                  }}
+                  className={[
+                    'press-soft flex w-full items-center justify-between rounded-2xl border bg-bone px-4 py-3 text-start',
+                    sel ? 'border-ink' : 'border-stone',
+                  ].join(' ')}
+                >
+                  <span className="text-[15px] font-medium">{c}</span>
+                  {sel && <Check size={16} />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </Sheet>
+
+      <Sheet
+        open={openSheet === 'notif'}
+        title="Notifications"
+        onClose={() => setOpenSheet(null)}
+      >
+        <ul className="space-y-3">
+          <li>
+            <ToggleRow
+              label="WhatsApp"
+              hint="Class reminders, confirmations"
+              on={notifWA}
+              onToggle={() => setNotifWA((v) => !v)}
+            />
+          </li>
+          <li>
+            <ToggleRow
+              label="Push"
+              hint="Last-minute changes, waitlist updates"
+              on={notifPush}
+              onToggle={() => setNotifPush((v) => !v)}
+            />
+          </li>
+        </ul>
+        <p className="mt-4 text-[12px] text-ink-60">
+          Channel preferences saved locally. Backend sync arrives once the
+          <code className="num"> notifications.preferences </code>
+          procedure lands.
+        </p>
+      </Sheet>
+
+      <Sheet open={openSheet === 'pay'} title="Payment methods" onClose={() => setOpenSheet(null)}>
+        <div className="rounded-2xl border border-stone bg-bone p-4">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-sand">
+              <CreditCard size={18} />
+            </span>
+            <div>
+              <div className="text-[15px] font-medium">Cash at the studio</div>
+              <div className="text-[12px] text-ink-60">Always available — pay on arrival</div>
+            </div>
+          </div>
+        </div>
+        <p className="mt-4 text-[13px] text-ink-60">
+          Card payments via Stripe / Whish / OMT are wired on the backend in stub mode for dev. The
+          real card-on-file flow lands once the marketplace surfaces a customer-facing payment-
+          methods procedure.
+        </p>
+      </Sheet>
+
+      <Sheet open={openSheet === 'priv'} title="Privacy & data" onClose={() => setOpenSheet(null)}>
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-stone bg-bone p-4">
+            <div className="text-[15px] font-medium">Download my data</div>
+            <p className="mt-1 text-[13px] text-ink-60">
+              JSON export of your profile, bookings, and preferences. Honors Lebanese Law 81/2018
+              data-portability rights.
+            </p>
+            <Button size="md" className="mt-3" onClick={exportMine}>
+              Download
+            </Button>
+          </div>
+          <div className="rounded-2xl border border-clay/40 bg-bone p-4">
+            <div className="text-[15px] font-medium">Delete my account</div>
+            <p className="mt-1 text-[13px] text-ink-60">
+              Removes your name, phone, and personal data per our retention policy. Booking
+              history kept anonymously for tax compliance.
+            </p>
+            <Button
+              variant="tertiary"
+              size="md"
+              className="mt-3"
+              onClick={() => toast.show('Deletion confirm flow lands in a follow-up.', 'info')}
+            >
+              Request deletion
+            </Button>
+          </div>
+        </div>
+      </Sheet>
+
+      <Sheet open={openSheet === 'help'} title="Help" onClose={() => setOpenSheet(null)}>
+        <ul className="space-y-3 text-[14px]">
+          <li className="rounded-2xl border border-stone bg-bone p-4">
+            <div className="font-medium">Booking didn&apos;t go through?</div>
+            <p className="mt-1 text-[13px] text-ink-60">
+              Most class-full and duplicate-booking errors resolve themselves — refresh the studio
+              page and try a different time slot.
+            </p>
+          </li>
+          <li className="rounded-2xl border border-stone bg-bone p-4">
+            <div className="font-medium">Reach a real human</div>
+            <p className="mt-1 text-[13px] text-ink-60">
+              WhatsApp <span className="num font-medium">+961 70 200 014</span>. We aim to reply
+              within an hour during business hours (9–18 Asia/Beirut, Mon–Sat).
+            </p>
+          </li>
+          <li className="rounded-2xl border border-stone bg-bone p-4">
+            <div className="font-medium">Studio-specific issues</div>
+            <p className="mt-1 text-[13px] text-ink-60">
+              For mat allergies, accessibility, or instructor preferences, contact the studio
+              directly — their phone is on the StudioDetail page.
+            </p>
+          </li>
+        </ul>
+      </Sheet>
     </div>
   );
 }
@@ -188,7 +429,15 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function List({ title, rows }: { title: string; rows: Row[] }) {
+function List({
+  title,
+  rows,
+  onOpen,
+}: {
+  title: string;
+  rows: Row[];
+  onOpen: (id: RowId) => void;
+}) {
   return (
     <section className="mt-7 px-5">
       <div className="label-eyebrow mb-2">{title}</div>
@@ -198,6 +447,7 @@ function List({ title, rows }: { title: string; rows: Row[] }) {
           return (
             <li key={r.id}>
               <button
+                onClick={() => onOpen(r.id)}
                 className={[
                   'press-soft flex w-full items-center gap-3 px-4 py-3.5 text-start',
                   i !== rows.length - 1 ? 'border-b border-stone/70' : '',
@@ -215,5 +465,43 @@ function List({ title, rows }: { title: string; rows: Row[] }) {
         })}
       </ul>
     </section>
+  );
+}
+
+function ToggleRow({
+  label,
+  hint,
+  on,
+  onToggle,
+}: {
+  label: string;
+  hint: string;
+  on: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className="press-soft flex w-full items-center justify-between rounded-2xl border border-stone bg-bone p-4 text-start"
+    >
+      <div>
+        <div className="text-[15px] font-medium">{label}</div>
+        <div className="mt-0.5 text-[12px] text-ink-60">{hint}</div>
+      </div>
+      <span
+        className={[
+          'inline-flex h-6 w-11 items-center rounded-full p-0.5 transition-colors',
+          on ? 'bg-ink' : 'bg-stone',
+        ].join(' ')}
+        aria-hidden
+      >
+        <span
+          className={[
+            'h-5 w-5 rounded-full bg-bone transition-transform',
+            on ? 'translate-x-5' : 'translate-x-0',
+          ].join(' ')}
+        />
+      </span>
+    </button>
   );
 }

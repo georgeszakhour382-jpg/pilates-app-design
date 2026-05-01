@@ -9,7 +9,9 @@ import { InstructorBadge } from '../components/shared/InstructorBadge';
 import { reviews as mockReviews } from '../data/mock';
 import type { ScreenId } from '../App';
 import { StudioMap } from '../components/shared/StudioMap';
+import { useToast } from '../components/ui/Toast';
 import { api } from '../lib/api';
+import { authStore } from '../lib/auth';
 import {
   enrichInstructor,
   enrichSession,
@@ -64,6 +66,21 @@ export function StudioDetail({
     },
     enabled: !!studioQuery.data,
   });
+
+  // When signed in, load the user's upcoming bookings so we can mark
+  // already-booked sessions as unavailable instead of letting the user
+  // walk into a duplicate-booking error at the payment step.
+  const signedIn = !!authStore.accessToken();
+  const myBookingsQuery = useQuery({
+    queryKey: ['bookings.listMine', 'UPCOMING'],
+    queryFn: () => api.bookings.listMine('UPCOMING'),
+    enabled: signedIn,
+  });
+  const bookedSessionIds = new Set(
+    (myBookingsQuery.data?.items ?? []).map((b) => b.classSessionId),
+  );
+
+  const toast = useToast();
 
   const sessionsForDay = useMemo(() => {
     const all = sessionsQuery.data ?? [];
@@ -220,12 +237,18 @@ export function StudioDetail({
             {sessionsForDay.map((s) => {
               const session = enrichSession(s);
               const inst = instructorFromSession(s);
+              const alreadyBooked = bookedSessionIds.has(s.id);
               return (
                 <li key={s.id}>
                   <ClassRow
                     session={session}
                     instructor={inst}
+                    alreadyBooked={alreadyBooked}
                     onClick={() => {
+                      if (alreadyBooked) {
+                        toast.show('You already booked this class.', 'info');
+                        return;
+                      }
                       setActiveSessionId?.(s.id);
                       goto('booking');
                     }}
@@ -329,11 +352,17 @@ export function StudioDetail({
         <Button
           block
           onClick={() => {
-            const target =
-              sessionsForDay[0] ?? (sessionsQuery.data ?? []).find((s) => s.status === 'SCHEDULED');
+            // Pick the first SCHEDULED session the user hasn't already booked.
+            const candidates = [
+              ...sessionsForDay,
+              ...((sessionsQuery.data ?? []).filter((s) => s.status === 'SCHEDULED')),
+            ];
+            const target = candidates.find((s) => !bookedSessionIds.has(s.id));
             if (target) {
               setActiveSessionId?.(target.id);
               goto('booking');
+            } else if (candidates.length > 0) {
+              toast.show("You've already booked every upcoming class here.", 'info');
             }
           }}
         >

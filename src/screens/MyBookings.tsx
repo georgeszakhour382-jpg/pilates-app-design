@@ -3,7 +3,8 @@ import { Calendar, Plus } from 'lucide-react';
 import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
 import { Button } from '../components/ui/Button';
-import { api, ApiError } from '../lib/api';
+import { useToast } from '../components/ui/Toast';
+import { api, ApiError, type BookingSummary } from '../lib/api';
 import { authStore } from '../lib/auth';
 import { enrichBooking } from '../lib/displayAdapters';
 import { studios as mockStudios } from '../data/mock';
@@ -37,10 +38,39 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
   });
 
   const qc = useQueryClient();
+  const toast = useToast();
   const cancel = useMutation({
     mutationFn: (bookingId: string) => api.bookings.cancel(bookingId),
+    // Optimistic remove from the upcoming list so the row disappears
+    // immediately. Roll back if the server call fails.
+    onMutate: async (bookingId) => {
+      await qc.cancelQueries({ queryKey: ['bookings.listMine', 'UPCOMING'] });
+      const prev = qc.getQueryData<{ items: BookingSummary[]; nextCursor: string | null }>([
+        'bookings.listMine',
+        'UPCOMING',
+      ]);
+      if (prev) {
+        qc.setQueryData(['bookings.listMine', 'UPCOMING'], {
+          ...prev,
+          items: prev.items.filter((b) => b.id !== bookingId),
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _bookingId, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData(['bookings.listMine', 'UPCOMING'], ctx.prev);
+      }
+      toast.show("Couldn't cancel — try again.", 'warn');
+    },
     onSuccess: () => {
+      toast.show('You successfully cancelled your booking.');
+      // Cross-screen invalidation: the cancelled session should now be
+      // available again on StudioDetail's schedule (and any 'already
+      // booked' grayed state must clear too).
       void qc.invalidateQueries({ queryKey: ['bookings.listMine'] });
+      void qc.invalidateQueries({ queryKey: ['classes.list'] });
+      void qc.invalidateQueries({ queryKey: ['classes.get'] });
     },
   });
 

@@ -13,11 +13,13 @@ export function ClassRow({
   instructor,
   onClick,
   selected,
+  alreadyBooked = false,
 }: {
   session: ClassSession;
   instructor: Instructor;
   onClick?: () => void;
   selected?: boolean;
+  alreadyBooked?: boolean;
 }) {
   const remaining = session.capacity - session.booked;
   const isFull = remaining <= 0;
@@ -26,9 +28,13 @@ export function ClassRow({
   return (
     <button
       onClick={onClick}
+      aria-disabled={alreadyBooked || undefined}
       className={[
         'press-soft relative flex w-full items-stretch gap-4 rounded-2xl bg-bone p-4 text-start hairline-b',
         selected ? 'ring-2 ring-ink' : '',
+        // Already-booked: still tappable (so we can show the toast), but
+        // visually greyed-out so users don't try to book again.
+        alreadyBooked ? 'opacity-50' : '',
       ].join(' ')}
     >
       <div className={['w-1 self-stretch rounded-full', stripeFor[session.type] ?? 'bg-stone'].join(' ')} />
@@ -47,14 +53,16 @@ export function ClassRow({
         <span
           className={[
             'rounded-full px-2 py-0.5 text-[11px] font-medium',
-            isFull
-              ? 'bg-stone text-ink-60'
-              : isLow
-                ? 'bg-rose/60 text-ink'
-                : 'bg-sand text-ink-60',
+            alreadyBooked
+              ? 'bg-sage/40 text-ink'
+              : isFull
+                ? 'bg-stone text-ink-60'
+                : isLow
+                  ? 'bg-rose/60 text-ink'
+                  : 'bg-sand text-ink-60',
           ].join(' ')}
         >
-          {isFull ? 'Waitlist' : isLow ? `${remaining} left` : 'Open'}
+          {alreadyBooked ? 'Booked' : isFull ? 'Waitlist' : isLow ? `${remaining} left` : 'Open'}
         </span>
       </div>
     </button>

@@ -45,6 +45,15 @@ export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
     mutationFn: ({ p, c }: { p: string; c: string }) => api.auth.verifyOtp(p, c),
     onSuccess: (session) => {
       authStore.save(session);
+      // If the user was bounced here mid-flow (e.g. tried to confirm a
+      // booking while signed-out), return them to that screen instead of
+      // dropping them on Discover.
+      const redirect = window.localStorage.getItem('pilates:postAuthRedirect');
+      if (redirect === 'booking') {
+        window.localStorage.removeItem('pilates:postAuthRedirect');
+        goto('booking');
+        return;
+      }
       goto('discover');
     },
   });
