@@ -1,0 +1,42 @@
+import { Compass, CalendarCheck, Heart, User } from 'lucide-react';
+import type { ScreenId } from '../../App';
+
+const items: { id: ScreenId; label: string; icon: typeof Compass }[] = [
+  { id: 'discover', label: 'Discover', icon: Compass },
+  { id: 'search', label: 'Search', icon: Heart },
+  { id: 'bookings', label: 'Bookings', icon: CalendarCheck },
+  { id: 'profile', label: 'Profile', icon: User },
+];
+
+export function BottomNav({
+  active,
+  onSelect,
+}: {
+  active: ScreenId;
+  onSelect: (id: ScreenId) => void;
+}) {
+  return (
+    <nav className="absolute inset-x-0 bottom-0 h-[88px] hairline-t bg-bone/95 backdrop-blur-sm">
+      <ul className="flex h-16 items-stretch px-2">
+        {items.map((it) => {
+          const Icon = it.icon;
+          const isActive = active === it.id;
+          return (
+            <li key={it.id} className="flex-1">
+              <button
+                onClick={() => onSelect(it.id)}
+                className={[
+                  'press-soft flex h-full w-full flex-col items-center justify-center gap-1',
+                  isActive ? 'text-ink' : 'text-ink-60',
+                ].join(' ')}
+              >
+                <Icon size={22} strokeWidth={isActive ? 2 : 1.6} />
+                <span className="text-[11px] font-medium tracking-tight">{it.label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
