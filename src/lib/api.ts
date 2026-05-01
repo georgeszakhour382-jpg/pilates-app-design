@@ -8,7 +8,11 @@
 
 import { authStore } from './auth';
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4040';
+// Default to the same-origin Vite proxy (`/api/trpc/*` → `localhost:4040/trpc`).
+// Override with VITE_API_URL=http://localhost:4040 to bypass the proxy and hit
+// the backend directly (useful when running the API on a different host).
+const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+const TRPC_PATH = API_URL ? '/trpc' : '/api/trpc';
 
 class ApiError extends Error {
   constructor(
@@ -39,7 +43,10 @@ async function unwrap<T>(res: Response): Promise<T> {
 }
 
 async function trpcQuery<T>(name: string, input?: unknown): Promise<T> {
-  const url = new URL(`${API_URL}/trpc/${name}`);
+  // `new URL` requires an absolute URL — use the current origin as base when
+  // we're going same-origin (proxy mode).
+  const base = API_URL || window.location.origin;
+  const url = new URL(`${TRPC_PATH}/${name}`, base);
   if (input !== undefined) {
     url.searchParams.set('input', JSON.stringify(input));
   }
@@ -48,7 +55,7 @@ async function trpcQuery<T>(name: string, input?: unknown): Promise<T> {
 }
 
 async function trpcMutation<T>(name: string, input?: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}/trpc/${name}`, {
+  const res = await fetch(`${API_URL}${TRPC_PATH}/${name}`, {
     method: 'POST',
     headers: buildHeaders(),
     body: JSON.stringify(input ?? {}),
