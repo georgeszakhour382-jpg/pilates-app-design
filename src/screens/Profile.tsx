@@ -19,6 +19,7 @@ import { Sheet } from '../components/ui/Sheet';
 import { useToast } from '../components/ui/Toast';
 import { api } from '../lib/api';
 import { authStore } from '../lib/auth';
+import { useLocale, useT } from '../lib/i18n';
 
 type RowId = 'pay' | 'lang' | 'city' | 'notif' | 'priv' | 'help';
 
@@ -37,8 +38,6 @@ const LANG_OPTIONS = [
 
 const CITY_OPTIONS = ['Beirut', 'Jounieh', 'Tripoli', 'Saida', 'Tyre', 'Zahlé', 'Byblos'];
 
-type LangValue = (typeof LANG_OPTIONS)[number]['value'];
-
 function readPref<T extends string>(key: string, fallback: T): T {
   const v = window.localStorage.getItem(key);
   return (v as T) || fallback;
@@ -47,9 +46,10 @@ function readPref<T extends string>(key: string, fallback: T): T {
 export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
   const signedIn = !!authStore.accessToken();
   const toast = useToast();
+  const t = useT();
+  const { locale, setLocale } = useLocale();
 
   const [openSheet, setOpenSheet] = useState<RowId | null>(null);
-  const [lang, setLang] = useState<LangValue>(() => readPref<LangValue>('pilates:lang', 'en'));
   const [city, setCity] = useState<string>(() => readPref<string>('pilates:city', 'Beirut'));
   const [notifWA, setNotifWA] = useState<boolean>(
     () => (window.localStorage.getItem('pilates:notif:whatsapp') ?? '1') === '1',
@@ -58,8 +58,10 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
     () => (window.localStorage.getItem('pilates:notif:push') ?? '1') === '1',
   );
 
-  // Persist preference changes immediately.
-  useEffect(() => window.localStorage.setItem('pilates:lang', lang), [lang]);
+  // Persist preference changes immediately. Language is owned by
+  // LocaleProvider — picking it via the language sheet writes there, and
+  // the side-effect (localStorage + <html lang/dir>) runs in that
+  // provider rather than here.
   useEffect(() => window.localStorage.setItem('pilates:city', city), [city]);
   useEffect(
     () => window.localStorage.setItem('pilates:notif:whatsapp', notifWA ? '1' : '0'),
@@ -101,18 +103,16 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
       <div className="fade-in relative h-full bg-bone">
         <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
           <header className="px-5 pt-14">
-            <div className="label-eyebrow">Account</div>
-            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Profile</h1>
+            <div className="label-eyebrow">{t.profile.eyebrow}</div>
+            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t.profile.title}</h1>
           </header>
           <div className="mt-10 px-5">
             <div className="rounded-2xl border border-dashed border-stone bg-bone px-5 py-10 text-center">
               <UserPlus size={20} className="mx-auto text-ink-60" />
-              <h3 className="font-display mt-3 text-[20px]">Sign in to see your profile</h3>
-              <p className="mt-1.5 text-[13px] text-ink-60">
-                Onboarding takes 30 seconds. We&apos;ll text you a code.
-              </p>
+              <h3 className="font-display mt-3 text-[20px]">{t.profile.signInTitle}</h3>
+              <p className="mt-1.5 text-[13px] text-ink-60">{t.profile.signInBody}</p>
               <Button size="md" className="mt-5" onClick={() => goto('onboarding')}>
-                Sign in
+                {t.common.signIn}
               </Button>
             </div>
           </div>
@@ -139,19 +139,19 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
     [...(upcomingQuery.data?.items ?? []), ...(pastQuery.data?.items ?? [])].map((b) => b.studioId),
   ).size;
 
-  const langLabel = LANG_OPTIONS.find((o) => o.value === lang)?.label ?? 'English';
+  const langLabel = LANG_OPTIONS.find((o) => o.value === locale)?.label ?? 'English';
   const notifChannels = [notifWA && 'WhatsApp', notifPush && 'Push'].filter(Boolean).join(' + ') ||
     'Off';
 
   const account: Row[] = [
-    { id: 'pay', label: 'Payment methods', hint: 'Cash · card via studio', icon: CreditCard },
-    { id: 'lang', label: 'Language', hint: langLabel, icon: Languages },
-    { id: 'city', label: 'City', hint: city, icon: Globe },
-    { id: 'notif', label: 'Notifications', hint: notifChannels, icon: Bell },
+    { id: 'pay', label: t.profile.rows.paymentMethods, hint: t.profile.rows.paymentHint, icon: CreditCard },
+    { id: 'lang', label: t.profile.rows.language, hint: langLabel, icon: Languages },
+    { id: 'city', label: t.profile.rows.city, hint: city, icon: Globe },
+    { id: 'notif', label: t.profile.rows.notifications, hint: notifChannels, icon: Bell },
   ];
   const support: Row[] = [
-    { id: 'priv', label: 'Privacy & data', hint: '', icon: ShieldCheck },
-    { id: 'help', label: 'Help', hint: '', icon: HelpCircle },
+    { id: 'priv', label: t.profile.rows.privacy, hint: '', icon: ShieldCheck },
+    { id: 'help', label: t.profile.rows.help, hint: '', icon: HelpCircle },
   ];
 
   const exportMine = async () => {
@@ -175,9 +175,9 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.show('Your data export is downloading.');
+      toast.show(t.profile.exportToast);
     } catch {
-      toast.show("Couldn't export — try again.", 'warn');
+      toast.show(t.profile.exportFail, 'warn');
     }
   };
 
@@ -185,8 +185,8 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
         <header className="px-5 pt-14">
-          <div className="label-eyebrow">Account</div>
-          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Profile</h1>
+          <div className="label-eyebrow">{t.profile.eyebrow}</div>
+          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t.profile.title}</h1>
         </header>
 
         {/* Identity card */}
@@ -205,32 +205,32 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-            <Stat label="Sessions" value={String(totalSessions)} />
-            <Stat label="Studios" value={String(distinctStudios)} />
-            <Stat label="Upcoming" value={String(upcomingCount)} />
+            <Stat label={t.profile.sessions} value={String(totalSessions)} />
+            <Stat label={t.profile.studios} value={String(distinctStudios)} />
+            <Stat label={t.profile.upcomingStat} value={String(upcomingCount)} />
           </div>
         </section>
 
         {/* Membership — placeholder until backend exposes Subscription self-view */}
         <section className="mt-5 mx-5 rounded-[20px] border border-stone bg-bone p-5">
-          <div className="label-eyebrow">Membership</div>
+          <div className="label-eyebrow">{t.profile.membership}</div>
           <div className="mt-2 flex items-center justify-between">
             <div>
-              <div className="font-display text-[20px]">Open Plan</div>
-              <p className="mt-0.5 text-[12px] text-ink-60">Pay per class · no commitment</p>
+              <div className="font-display text-[20px]">{t.profile.openPlan}</div>
+              <p className="mt-0.5 text-[12px] text-ink-60">{t.profile.openPlanSub}</p>
             </div>
             <button
               onClick={() => goto('discover')}
               className="press-soft rounded-full bg-clay px-4 py-2 text-[12px] font-medium text-bone"
             >
-              Upgrade
+              {t.profile.upgrade}
             </button>
           </div>
         </section>
 
         {/* Account list */}
-        <List title="Account" rows={account} onOpen={(id) => setOpenSheet(id)} />
-        <List title="Support" rows={support} onOpen={(id) => setOpenSheet(id)} />
+        <List title={t.profile.rows.account} rows={account} onOpen={(id) => setOpenSheet(id)} />
+        <List title={t.profile.rows.support} rows={support} onOpen={(id) => setOpenSheet(id)} />
 
         <div className="mt-9 px-5">
           <button
@@ -239,12 +239,12 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
             className="press-soft inline-flex items-center gap-2 text-[14px] text-ink-60 disabled:opacity-50"
           >
             <LogOut size={14} />
-            {signOutMutation.isPending ? 'Signing out…' : 'Sign out'}
+            {signOutMutation.isPending ? `${t.common.signOut}…` : t.common.signOut}
           </button>
         </div>
 
         <p className="mt-10 px-5 text-center font-display italic text-[12px] text-ink-60">
-          Take care of your knees. They have to last you the rest of your life.
+          {t.profile.quote}
         </p>
       </div>
 
@@ -254,19 +254,19 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
           containment styling applies. */}
       <Sheet
         open={openSheet === 'lang'}
-        title="Language"
+        title={t.profile.sheets.langTitle}
         onClose={() => setOpenSheet(null)}
       >
         <ul className="space-y-2">
           {LANG_OPTIONS.map((opt) => {
-            const sel = lang === opt.value;
+            const sel = locale === opt.value;
             return (
               <li key={opt.value}>
                 <button
                   onClick={() => {
-                    setLang(opt.value);
+                    setLocale(opt.value);
                     setOpenSheet(null);
-                    toast.show(`Language set to ${opt.label}.`);
+                    toast.show(`${t.profile.rows.language}: ${opt.label}`);
                   }}
                   className={[
                     'press-soft flex w-full items-center justify-between rounded-2xl border bg-bone px-4 py-3 text-start',
@@ -280,13 +280,10 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
             );
           })}
         </ul>
-        <p className="mt-4 text-[12px] text-ink-60">
-          Saved on this device. UI translation arrives in a follow-up — currently changes the
-          stored preference only.
-        </p>
+        <p className="mt-4 text-[12px] text-ink-60">{t.profile.sheets.langBody}</p>
       </Sheet>
 
-      <Sheet open={openSheet === 'city'} title="City" onClose={() => setOpenSheet(null)}>
+      <Sheet open={openSheet === 'city'} title={t.profile.sheets.cityTitle} onClose={() => setOpenSheet(null)}>
         <ul className="space-y-2">
           {CITY_OPTIONS.map((c) => {
             const sel = city === c;
@@ -296,7 +293,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
                   onClick={() => {
                     setCity(c);
                     setOpenSheet(null);
-                    toast.show(`City set to ${c}.`);
+                    toast.show(`${t.profile.rows.city}: ${c}`);
                   }}
                   className={[
                     'press-soft flex w-full items-center justify-between rounded-2xl border bg-bone px-4 py-3 text-start',
@@ -310,6 +307,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
             );
           })}
         </ul>
+        <p className="mt-4 text-[12px] text-ink-60">{t.profile.sheets.cityBody}</p>
       </Sheet>
 
       <Sheet

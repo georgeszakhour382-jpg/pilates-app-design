@@ -9,6 +9,7 @@ import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
 import { api, type InstructorSummary } from '../lib/api';
 import { enrichInstructor, enrichStudio } from '../lib/displayAdapters';
+import { useLocale, useT } from '../lib/i18n';
 
 const categories: ClassType[] = ['Reformer', 'Mat', 'Pre/postnatal', 'Contemporary', 'Clinical'];
 
@@ -19,6 +20,8 @@ export function Discover({
   goto: (id: ScreenId) => void;
   setActiveStudioSlug?: (slug: string) => void;
 }) {
+  const t = useT();
+  const { locale } = useLocale();
   const [cat, setCat] = useState<ClassType | 'All'>('All');
 
   const studiosQuery = useQuery({
@@ -52,7 +55,8 @@ export function Discover({
 
   const editorial = studios[0];
 
-  const today = new Intl.DateTimeFormat('en-GB', {
+  const todayLocale = locale === 'ar' ? 'ar-LB' : locale === 'fr' ? 'fr-FR' : 'en-GB';
+  const today = new Intl.DateTimeFormat(todayLocale, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -63,9 +67,14 @@ export function Discover({
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
         <header className="px-5 pt-14">
-          <div className="label-eyebrow">Beirut · {today}</div>
+          <div className="label-eyebrow">{t.discover.eyebrow} · {today}</div>
           <h1 className="font-display mt-1 text-[30px] leading-[1.1]">
-            Find your <em className="italic">next</em> class.
+            {t.discover.headline.replace(t.discover.headlineEm, '⟦HE⟧').split('⟦HE⟧').map((part, i, arr) => (
+              <span key={i}>
+                {part}
+                {i < arr.length - 1 && <em className="italic">{t.discover.headlineEm}</em>}
+              </span>
+            ))}
           </h1>
         </header>
 
@@ -76,7 +85,7 @@ export function Discover({
             className="press-soft flex h-12 w-full items-center gap-3 rounded-full bg-sand px-4 text-start"
           >
             <Search size={18} className="text-ink-60" />
-            <span className="text-[14px] text-ink-60">Studio, neighborhood, instructor…</span>
+            <span className="text-[14px] text-ink-60">{t.discover.searchPlaceholder}</span>
             <span className="ml-auto rounded-full bg-bone p-1.5 text-ink">
               <SlidersHorizontal size={14} />
             </span>
@@ -85,10 +94,10 @@ export function Discover({
 
         {/* Categories */}
         <div className="mt-7 px-5">
-          <div className="label-eyebrow">Practice</div>
+          <div className="label-eyebrow">{t.discover.practiceLabel}</div>
           <div className="mt-2 -mx-5 flex gap-2 overflow-x-auto px-5 scrollbar-none">
             <Chip selected={cat === 'All'} onClick={() => setCat('All')}>
-              All
+              {t.discover.all}
             </Chip>
             {categories.map((c) => (
               <Chip key={c} selected={cat === c} onClick={() => setCat(c)}>
@@ -102,20 +111,17 @@ export function Discover({
         <section className="mt-9">
           <div className="flex items-end justify-between px-5">
             <div>
-              <div className="label-eyebrow">Near you</div>
-              <h2 className="font-display mt-1 text-[22px]">Studios within 15 min</h2>
+              <div className="label-eyebrow">{t.discover.nearYou}</div>
+              <h2 className="font-display mt-1 text-[22px]">{t.discover.nearYouTitle}</h2>
             </div>
-            <button className="text-[12px] font-medium text-ink-60">See all</button>
+            <button className="text-[12px] font-medium text-ink-60">{t.common.seeAll}</button>
           </div>
           <div className="mt-4 -mx-5 flex gap-3 overflow-x-auto px-5 pb-2 scrollbar-none">
             {studiosQuery.isLoading && (
-              <p className="px-5 text-[13px] text-ink-60">Loading studios…</p>
+              <p className="px-5 text-[13px] text-ink-60">{t.discover.loading}</p>
             )}
             {studiosQuery.error && (
-              <p className="px-5 text-[13px] text-terracotta">
-                Couldn&apos;t reach the API. Is it running on{' '}
-                <code className="num">localhost:4040</code>?
-              </p>
+              <p className="px-5 text-[13px] text-terracotta">{t.discover.apiUnreachable}</p>
             )}
             {studios.map((s) => (
               <StudioCard
@@ -129,7 +135,7 @@ export function Discover({
               />
             ))}
             {!studiosQuery.isLoading && studios.length === 0 && (
-              <p className="px-5 text-[13px] text-ink-60">No studios match this practice.</p>
+              <p className="px-5 text-[13px] text-ink-60">{t.discover.noMatch}</p>
             )}
           </div>
         </section>
@@ -138,8 +144,8 @@ export function Discover({
             reviewCount come from the merged mock until backend exposes them. */}
         {allInstructors.length > 0 && (
           <section className="mt-9 px-5">
-            <div className="label-eyebrow">This week</div>
-            <h2 className="font-display mt-1 text-[22px]">Teachers our regulars rebook</h2>
+            <div className="label-eyebrow">{t.discover.instructorsEyebrow}</div>
+            <h2 className="font-display mt-1 text-[22px]">{t.discover.instructorsTitle}</h2>
             <ul className="mt-4 space-y-4">
               {allInstructors.slice(0, 4).map((i) => {
                 const enriched = enrichInstructor(i);
@@ -179,7 +185,7 @@ export function Discover({
                 }}
               />
               <div className="absolute inset-x-0 bottom-0 p-5 text-bone">
-                <div className="label-eyebrow !text-bone/70">Why we love it</div>
+                <div className="label-eyebrow !text-bone/70">{t.discover.editorialEyebrow}</div>
                 <h3 className="font-display mt-1 text-[26px] leading-tight">{editorial.name}</h3>
                 <p className="mt-2 text-[14px] leading-[1.55] text-bone/85">{editorial.loved}</p>
                 <button
@@ -189,7 +195,7 @@ export function Discover({
                   }}
                   className="press-soft mt-5 inline-flex h-10 items-center rounded-full bg-bone px-5 text-[13px] font-medium text-ink"
                 >
-                  Read more
+                  {t.discover.readMore}
                 </button>
               </div>
             </div>
@@ -198,7 +204,7 @@ export function Discover({
 
         {/* Editorial postscript in serif italic */}
         <p className="mt-5 px-5 text-center font-display italic text-[14px] text-ink-60">
-          Photography by Lara Baladi
+          {t.discover.photoCredit}
         </p>
       </div>
 

@@ -12,6 +12,7 @@ import { InstructorDashboard } from './screens/InstructorDashboard';
 import { Roster } from './screens/Roster';
 import { Earnings } from './screens/Earnings';
 import { EditSchedule } from './screens/EditSchedule';
+import { useT } from './lib/i18n';
 
 export type ScreenId =
   | 'onboarding'
@@ -27,22 +28,23 @@ export type ScreenId =
   | 'roster'
   | 'earnings';
 
-const screens: { id: ScreenId; label: string; tone?: 'dark' | 'light'; group?: 'teach' }[] = [
-  { id: 'onboarding', label: 'Onboarding', tone: 'light' },
-  { id: 'discover', label: 'Discover' },
-  { id: 'studio', label: 'Studio', tone: 'light' },
-  { id: 'instructor', label: 'Instructor', tone: 'light' },
-  { id: 'booking', label: 'Booking' },
-  { id: 'bookings', label: 'My bookings' },
-  { id: 'search', label: 'Search' },
-  { id: 'profile', label: 'Profile' },
-  { id: 'instructor-dashboard', label: 'Teach', group: 'teach' },
-  { id: 'edit-schedule', label: 'Schedule', group: 'teach' },
-  { id: 'roster', label: 'Roster', group: 'teach' },
-  { id: 'earnings', label: 'Earnings', group: 'teach' },
+const screens: { id: ScreenId; tone?: 'dark' | 'light'; group?: 'teach' }[] = [
+  { id: 'onboarding', tone: 'light' },
+  { id: 'discover' },
+  { id: 'studio', tone: 'light' },
+  { id: 'instructor', tone: 'light' },
+  { id: 'booking' },
+  { id: 'bookings' },
+  { id: 'search' },
+  { id: 'profile' },
+  { id: 'instructor-dashboard', group: 'teach' },
+  { id: 'edit-schedule', group: 'teach' },
+  { id: 'roster', group: 'teach' },
+  { id: 'earnings', group: 'teach' },
 ];
 
 export default function App() {
+  const t = useT();
   const [active, setActive] = useState<ScreenId>('discover');
   // Selected entities used for cross-screen navigation. The prototype's
   // screen switcher is global; these track "which studio / which session
@@ -57,10 +59,8 @@ export default function App() {
       <header className="mx-auto max-w-[1280px] px-6 pt-10 pb-4">
         <div className="flex items-baseline justify-between">
           <div>
-            <div className="label-eyebrow">Live · wired to backend</div>
-            <h1 className="font-display mt-1 text-[28px] leading-tight">
-              Pilates Marketplace · <span className="italic">live data</span>
-            </h1>
+            <div className="label-eyebrow">{t.switcher.eyebrow}</div>
+            <h1 className="font-display mt-1 text-[28px] leading-tight">{t.switcher.title}</h1>
           </div>
           <div className="hidden text-[12px] text-ink-60 sm:block">
             390 × 844 mobile · React + Tailwind v4
@@ -85,7 +85,7 @@ export default function App() {
                         : 'bg-bone text-ink hover:bg-sand border border-stone/60',
                     ].join(' ')}
                   >
-                    {s.label}
+                    {t.switcher.screens[s.id]}
                   </button>
                 </span>
               );
@@ -109,10 +109,7 @@ export default function App() {
       </main>
 
       <footer className="mx-auto max-w-[1280px] px-6 pb-12 text-center text-[12px] text-ink-60">
-        Click any chip above to switch screens. Real data from the local
-        backend (<code className="num">localhost:4040</code>) — sign in via
-        Onboarding with phone <code className="num">+96170000001</code>, code{' '}
-        <code className="num">123456</code>.
+        {t.switcher.footer}
       </footer>
     </div>
   );

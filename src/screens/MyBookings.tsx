@@ -8,6 +8,7 @@ import { api, ApiError, type BookingSummary } from '../lib/api';
 import { authStore } from '../lib/auth';
 import { enrichBooking } from '../lib/displayAdapters';
 import { studios as mockStudios } from '../data/mock';
+import { useT } from '../lib/i18n';
 
 const FALLBACK_HERO =
   'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=900&h=700&q=80';
@@ -23,6 +24,7 @@ const neighborhoodForStudio = (studioId: string, studioName: string): string | n
 };
 
 export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
+  const t = useT();
   const signedIn = !!authStore.accessToken();
 
   const upcomingQuery = useQuery({
@@ -79,18 +81,16 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
       <div className="fade-in relative h-full bg-bone">
         <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
           <header className="px-5 pt-14">
-            <div className="label-eyebrow">Your practice</div>
-            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Bookings</h1>
+            <div className="label-eyebrow">{t.myBookings.eyebrow}</div>
+            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t.myBookings.title}</h1>
           </header>
           <div className="mt-10 px-5">
             <div className="rounded-2xl border border-dashed border-stone bg-bone px-5 py-10 text-center">
               <Calendar size={20} className="mx-auto text-ink-60" />
-              <h3 className="font-display mt-3 text-[20px]">Sign in to see your bookings</h3>
-              <p className="mt-1.5 text-[13px] text-ink-60">
-                Onboarding takes 30 seconds. We&apos;ll text you a code.
-              </p>
+              <h3 className="font-display mt-3 text-[20px]">{t.myBookings.signInTitle}</h3>
+              <p className="mt-1.5 text-[13px] text-ink-60">{t.myBookings.signInBody}</p>
               <Button size="md" className="mt-5" onClick={() => goto('onboarding')}>
-                Sign in
+                {t.common.signIn}
               </Button>
             </div>
           </div>
@@ -107,30 +107,30 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
         <header className="px-5 pt-14">
-          <div className="label-eyebrow">Your practice</div>
-          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Bookings</h1>
+          <div className="label-eyebrow">{t.myBookings.eyebrow}</div>
+          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t.myBookings.title}</h1>
         </header>
 
         {/* Upcoming */}
         <section className="mt-6 px-5">
           <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-[20px]">Upcoming</h2>
+            <h2 className="font-display text-[20px]">{t.myBookings.upcoming}</h2>
             <button
               onClick={() => goto('discover')}
               className="press-soft inline-flex items-center gap-1 text-[12px] font-medium text-ink-60"
             >
-              <Plus size={14} /> Book
+              <Plus size={14} /> {t.myBookings.book}
             </button>
           </div>
 
           {upcomingQuery.isLoading && (
-            <p className="mt-4 text-[13px] text-ink-60">Loading…</p>
+            <p className="mt-4 text-[13px] text-ink-60">{t.common.loading}</p>
           )}
           {upcomingQuery.error && (
             <p className="mt-4 text-[13px] text-terracotta">
               {upcomingQuery.error instanceof ApiError
                 ? upcomingQuery.error.message
-                : 'Could not load bookings.'}
+                : t.common.error.generic}
             </p>
           )}
 
