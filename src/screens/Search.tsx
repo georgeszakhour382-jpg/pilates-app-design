@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search as SearchIcon, X } from 'lucide-react';
+import { Map as MapIcon, List as ListIcon, Search as SearchIcon, X } from 'lucide-react';
 import { Chip } from '../components/ui/Chip';
 import { Button } from '../components/ui/Button';
 import { Sheet } from '../components/ui/Sheet';
+import { MultiStudioMap, type MapStudio } from '../components/shared/MultiStudioMap';
 import type { ClassType } from '../data/mock';
 import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
 import { api } from '../lib/api';
-import { enrichStudio } from '../lib/displayAdapters';
+import { enrichStudio, studioCoords } from '../lib/displayAdapters';
 
 const classTypes: ClassType[] = ['Reformer', 'Mat', 'Contemporary', 'Clinical', 'Pre/postnatal'];
 const levels = ['Beginner', 'All levels', 'Intermediate', 'Advanced'];
@@ -25,6 +26,7 @@ export function Search({
 }) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [view, setView] = useState<'list' | 'map'>('list');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selTypes, setSelTypes] = useState<Set<ClassType>>(new Set());
   const [distance, setDistance] = useState(30);
@@ -60,6 +62,33 @@ export function Search({
     );
     return byPrice;
   }, [studiosQuery.data, selTypes, price]);
+
+  // Studios projected to the map's expected shape — only the ones for which
+  // we have coords (real or fallback by slug).
+  const mapStudios: MapStudio[] = useMemo(() => {
+    const items = studiosQuery.data?.items ?? [];
+    const out: MapStudio[] = [];
+    for (let i = 0; i < results.length; i += 1) {
+      const s = results[i]!;
+      const backend = items[i];
+      if (!backend) continue;
+      const coords = studioCoords(backend);
+      if (!coords) continue;
+      out.push({
+        id: s.id,
+        slug: s.slug,
+        name: s.name,
+        neighborhood: s.neighborhood,
+        city: s.city,
+        rating: s.rating,
+        priceFrom: s.priceFrom,
+        hero: s.hero,
+        lat: coords.lat,
+        lng: coords.lng,
+      });
+    }
+    return out;
+  }, [results, studiosQuery.data]);
 
   const activeFilterCount =
     (selTypes.size > 0 ? 1 : 0) +
@@ -119,10 +148,62 @@ export function Search({
               );
             })}
           </div>
+
+          {/* List / Map view toggle */}
+          <div
+            role="tablist"
+            aria-label="View mode"
+            className="mt-3 inline-flex rounded-full bg-sand p-1"
+          >
+            {(
+              [
+                { id: 'list' as const, label: 'List', icon: ListIcon },
+                { id: 'map' as const, label: 'Map', icon: MapIcon },
+              ]
+            ).map((v) => {
+              const Icon = v.icon;
+              const sel = view === v.id;
+              return (
+                <button
+                  key={v.id}
+                  role="tab"
+                  aria-selected={sel}
+                  onClick={() => setView(v.id)}
+                  className={[
+                    'press-soft inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors',
+                    sel ? 'bg-ink text-bone' : 'text-ink-60',
+                  ].join(' ')}
+                >
+                  <Icon size={13} />
+                  {v.label}
+                </button>
+              );
+            })}
+          </div>
         </header>
 
-        {/* Recents — shown when input is empty */}
-        {!query && (
+        {/* Map view — shows all current results pinned. */}
+        {view === 'map' && (
+          <section className="mt-5 px-5">
+            <div className="label-eyebrow">{mapStudios.length} on the map</div>
+            <MultiStudioMap
+              studios={mapStudios}
+              onSelect={(s) => {
+                setActiveStudioSlug?.(s.slug);
+                goto('studio');
+              }}
+              className="mt-3 h-[440px]"
+            />
+            {!studiosQuery.isLoading && mapStudios.length === 0 && (
+              <p className="mt-3 text-[13px] text-ink-60">
+                No studios with coordinates match these filters.
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* Recents — shown when input is empty AND list view */}
+        {view === 'list' && !query && (
           <section className="mt-7 px-5">
             <div className="label-eyebrow">Suggested</div>
             <ul className="mt-3 space-y-3">
@@ -144,7 +225,8 @@ export function Search({
           </section>
         )}
 
-        {/* Results */}
+        {/* Results — list view */}
+        {view === 'list' && (
         <section className="mt-7 px-5">
           {studiosQuery.isLoading && (
             <p className="text-[13px] text-ink-60">Searching…</p>
@@ -190,6 +272,7 @@ export function Search({
             )}
           </ul>
         </section>
+        )}
       </div>
 
       <Sheet
