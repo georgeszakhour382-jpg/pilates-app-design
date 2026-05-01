@@ -39,6 +39,35 @@ const FALLBACK_GALLERY = [FALLBACK_HERO];
 
 const FALLBACK_AMENITIES = ['Mats provided', 'Showers', 'Lockers'];
 
+// Approximate Beirut-area coords by slug. Used when the backend's Studio
+// row has null latitude/longitude (seed data doesn't populate these yet —
+// see issue on the marketplace repo for "add lat/lng to seed"). Drop this
+// table the moment the backend exposes real coords.
+const FALLBACK_COORDS_BY_SLUG: Record<string, { lat: number; lng: number }> = {
+  'beirut-pilates': { lat: 33.8869, lng: 35.5163 }, // Achrafieh
+  'reformer-room': { lat: 33.8959, lng: 35.5276 }, // Mar Mikhael
+  'core-studio-jounieh': { lat: 33.9806, lng: 35.6178 }, // Kaslik
+  'mat-and-method': { lat: 33.8973, lng: 35.4806 }, // Hamra
+  'wave-studio': { lat: 33.9007, lng: 35.5168 }, // Saifi
+};
+
+/**
+ * Best-effort coordinates for a studio. Prefers the backend's lat/lng;
+ * falls back to a curated Beirut-area lookup by slug, then to a Beirut
+ * downtown default. Returns `null` if even the default would be misleading
+ * (i.e. unknown slug + want strict).
+ */
+export function studioCoords(
+  studio: { slug: string; latitude: number | null; longitude: number | null },
+): { lat: number; lng: number } | null {
+  if (studio.latitude != null && studio.longitude != null) {
+    return { lat: studio.latitude, lng: studio.longitude };
+  }
+  const fallback = FALLBACK_COORDS_BY_SLUG[studio.slug];
+  if (fallback) return fallback;
+  return null;
+}
+
 /**
  * Merge a backend `StudioSummary` with the mock cosmetic fields by slug.
  * Returns the prototype's expected `Studio` shape.

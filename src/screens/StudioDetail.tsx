@@ -8,6 +8,7 @@ import { ClassRow } from '../components/shared/ClassRow';
 import { InstructorBadge } from '../components/shared/InstructorBadge';
 import { reviews as mockReviews } from '../data/mock';
 import type { ScreenId } from '../App';
+import { StudioMap } from '../components/shared/StudioMap';
 import { api } from '../lib/api';
 import {
   enrichInstructor,
@@ -15,6 +16,7 @@ import {
   enrichStudio,
   instructorFromSession,
   nextDayLabels,
+  studioCoords,
 } from '../lib/displayAdapters';
 
 export function StudioDetail({
@@ -282,6 +284,20 @@ export function StudioDetail({
             ))}
           </ul>
         </section>
+
+        {/* Find it — real Leaflet map. Uses backend lat/lng when present,
+            falls back to a curated by-slug lookup until seed populates them. */}
+        {(() => {
+          const coords = studioCoords(studioQuery.data);
+          if (!coords) return null;
+          return (
+            <section className="mt-9 px-5">
+              <div className="label-eyebrow">Find it</div>
+              <h2 className="font-display mt-1 text-[22px]">{studio.address}</h2>
+              <StudioMap lat={coords.lat} lng={coords.lng} className="mt-3" />
+            </section>
+          );
+        })()}
 
         {/* Cancellation */}
         <section className="mt-7 mx-5 rounded-2xl border border-stone p-4">
