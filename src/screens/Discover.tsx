@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { Search, SlidersHorizontal } from 'lucide-react';
 import { Chip } from '../components/ui/Chip';
 import { StudioCard } from '../components/shared/StudioCard';
@@ -7,8 +7,8 @@ import { InstructorBadge } from '../components/shared/InstructorBadge';
 import type { ClassType } from '../data/mock';
 import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
-import { api } from '../lib/api';
-import { enrichStudio, mockInstructorList } from '../lib/displayAdapters';
+import { api, type InstructorSummary } from '../lib/api';
+import { enrichInstructor, enrichStudio } from '../lib/displayAdapters';
 
 const categories: ClassType[] = ['Reformer', 'Mat', 'Pre/postnatal', 'Contemporary', 'Clinical'];
 
@@ -25,6 +25,20 @@ export function Discover({
     queryKey: ['studios.list'],
     queryFn: () => api.studios.list(),
   });
+
+  // Fetch instructors per studio in parallel. With ~3 studios this is fine;
+  // a dedicated `instructorsPublic.featured()` would be cleaner at scale.
+  const studioIds = studiosQuery.data?.items.map((s) => s.id) ?? [];
+  const instructorQueries = useQueries({
+    queries: studioIds.map((id) => ({
+      queryKey: ['instructors.list', id],
+      queryFn: () => api.instructors.list(id),
+      staleTime: 60_000,
+    })),
+  });
+  const allInstructors: InstructorSummary[] = instructorQueries.flatMap(
+    (q) => q.data ?? [],
+  );
 
   // Real studios first, enriched with mock cosmetic fields. Filter is purely
   // visual — the backend doesn't expose `classTypes` on Studio yet, so the
@@ -120,21 +134,30 @@ export function Discover({
           </div>
         </section>
 
-        {/* Top instructors — mock until backend exposes a public instructors query. */}
-        <section className="mt-9 px-5">
-          <div className="label-eyebrow">This week</div>
-          <h2 className="font-display mt-1 text-[22px]">Teachers our regulars rebook</h2>
-          <ul className="mt-4 space-y-4">
-            {mockInstructorList.slice(0, 4).map((i) => (
-              <li key={i.id} className="flex items-center justify-between">
-                <InstructorBadge instructor={i} onClick={() => goto('instructor')} />
-                <span className="num text-[13px] font-medium text-ink-60">
-                  {i.rating.toFixed(2)} · {i.reviewCount}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {/* Top instructors — real, aggregated across studios. Rating /
+            reviewCount come from the merged mock until backend exposes them. */}
+        {allInstructors.length > 0 && (
+          <section className="mt-9 px-5">
+            <div className="label-eyebrow">This week</div>
+            <h2 className="font-display mt-1 text-[22px]">Teachers our regulars rebook</h2>
+            <ul className="mt-4 space-y-4">
+              {allInstructors.slice(0, 4).map((i) => {
+                const enriched = enrichInstructor(i);
+                return (
+                  <li key={i.id} className="flex items-center justify-between">
+                    <InstructorBadge
+                      instructor={enriched}
+                      onClick={() => goto('instructor')}
+                    />
+                    <span className="num text-[13px] font-medium text-ink-60">
+                      {enriched.rating.toFixed(2)} · {enriched.reviewCount}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {/* Editorial */}
         {editorial && (
