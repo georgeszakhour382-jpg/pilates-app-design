@@ -56,7 +56,7 @@ export function InstructorDashboard({ goto }: { goto: (id: ScreenId) => void }) 
               <h2 className="font-display mt-1 text-[22px]">{instructorToday.upcomingToday.length} classes</h2>
             </div>
             <button
-              onClick={() => goto('studio')}
+              onClick={() => goto('edit-schedule')}
               className="press-soft inline-flex items-center gap-1 rounded-full bg-sand px-3 py-1.5 text-[12px] font-medium"
             >
               <Plus size={14} /> New
@@ -68,7 +68,7 @@ export function InstructorDashboard({ goto }: { goto: (id: ScreenId) => void }) 
               return (
                 <li key={c.id}>
                   <button
-                    onClick={() => goto('bookings')}
+                    onClick={() => goto('roster')}
                     className="press-soft flex w-full items-center gap-4 rounded-2xl bg-bone p-4 text-start hairline-b"
                   >
                     <div className="num text-[18px] font-display">{c.time}</div>
@@ -102,19 +102,19 @@ export function InstructorDashboard({ goto }: { goto: (id: ScreenId) => void }) 
               icon={Calendar}
               title="Edit schedule"
               body="Add a class, block a date."
-              onClick={() => goto('studio')}
+              onClick={() => goto('edit-schedule')}
             />
             <ActionCard
               icon={Users}
               title="Roster"
               body="See who’s booked today."
-              onClick={() => goto('bookings')}
+              onClick={() => goto('roster')}
             />
             <ActionCard
               icon={TrendingUp}
               title="Earnings"
               body="Statements & payouts."
-              onClick={() => goto('profile')}
+              onClick={() => goto('earnings')}
             />
             <ActionCard
               icon={Sparkles}

@@ -430,6 +430,114 @@ export const findInstructor = (id: string) =>
 export const findSession = (id: string) =>
   sessions.find((s) => s.id === id) ?? sessions[0]!;
 
+// Roster — attendees for the 09:00 Reformer
+export interface RosterEntry {
+  id: string;
+  fullName: string;
+  initials: string;
+  phone: string;
+  visits: number;
+  status: 'confirmed' | 'waitlist' | 'checked_in' | 'no_show';
+  note?: string;
+  packageCredit?: boolean;
+}
+
+export const rosterToday = {
+  classTitle: 'Reformer · 55m',
+  studio: 'Beirut Pilates',
+  startsAt: 'Today · 09:00',
+  capacity: 6,
+  entries: [
+    { id: 'r1', fullName: 'Lina Khoury', initials: 'LK', phone: '+961 70 200 014', visits: 38, status: 'checked_in', note: 'Lower back — keep loops light.', packageCredit: true },
+    { id: 'r2', fullName: 'Rana Haddad', initials: 'RH', phone: '+961 71 442 098', visits: 19, status: 'confirmed', packageCredit: true },
+    { id: 'r3', fullName: 'Sara Nasrallah', initials: 'SN', phone: '+961 76 312 887', visits: 7, status: 'confirmed', note: 'Pregnant 22w — modify supine work.' },
+    { id: 'r4', fullName: 'Maya Aoun', initials: 'MA', phone: '+961 70 188 320', visits: 51, status: 'confirmed', packageCredit: true },
+    { id: 'r5', fullName: 'Joëlle Sfeir', initials: 'JS', phone: '+961 78 990 121', visits: 2, status: 'confirmed', note: 'New — full intro before springs.' },
+    { id: 'r6', fullName: 'Dana Tabet', initials: 'DT', phone: '+961 81 540 776', visits: 24, status: 'confirmed' },
+    { id: 'r7', fullName: 'Hiba Abou-Khalil', initials: 'HA', phone: '+961 70 661 405', visits: 11, status: 'waitlist' },
+  ] satisfies RosterEntry[],
+};
+
+// Earnings
+export interface EarningsWeek {
+  label: string;
+  start: string;
+  end: string;
+  gross: number;
+  classes: number;
+  hours: number;
+  status: 'paid' | 'pending';
+  paidOn?: string;
+}
+
+export const earnings = {
+  ytd: 9_240,
+  thisWeek: 980,
+  lastWeek: 840,
+  nextPayout: { date: 'Mon, May 5', amount: 980, method: 'Whish · ending 442' },
+  weeks: [
+    { label: 'This week', start: 'Apr 28', end: 'May 4', gross: 980, classes: 14, hours: 12.8, status: 'pending' },
+    { label: 'Last week', start: 'Apr 21', end: 'Apr 27', gross: 840, classes: 12, hours: 11.0, status: 'paid', paidOn: 'Apr 28' },
+    { label: 'Apr 14 – 20', start: 'Apr 14', end: 'Apr 20', gross: 720, classes: 11, hours: 10.1, status: 'paid', paidOn: 'Apr 21' },
+    { label: 'Apr 7 – 13', start: 'Apr 7', end: 'Apr 13', gross: 880, classes: 13, hours: 11.9, status: 'paid', paidOn: 'Apr 14' },
+    { label: 'Mar 31 – Apr 6', start: 'Mar 31', end: 'Apr 6', gross: 700, classes: 10, hours: 9.2, status: 'paid', paidOn: 'Apr 7' },
+  ] satisfies EarningsWeek[],
+};
+
+// Edit schedule
+export interface ScheduleDay {
+  label: string;
+  date: string;
+  weekday: string;
+  classes: {
+    id: string;
+    time: string;
+    type: ClassType;
+    duration: number;
+    booked: number;
+    capacity: number;
+  }[];
+  blocked?: boolean;
+}
+
+export const schedule: ScheduleDay[] = [
+  {
+    label: 'Today',
+    date: '01',
+    weekday: 'Thu',
+    classes: [
+      { id: 'sd1', time: '09:00', type: 'Reformer', duration: 55, booked: 6, capacity: 6 },
+      { id: 'sd2', time: '12:00', type: 'Mat', duration: 50, booked: 4, capacity: 12 },
+      { id: 'sd3', time: '18:00', type: 'Pre/postnatal', duration: 55, booked: 6, capacity: 6 },
+    ],
+  },
+  {
+    label: 'Tomorrow',
+    date: '02',
+    weekday: 'Fri',
+    classes: [
+      { id: 'sd4', time: '09:00', type: 'Reformer', duration: 55, booked: 5, capacity: 6 },
+      { id: 'sd5', time: '18:00', type: 'Reformer', duration: 55, booked: 2, capacity: 6 },
+    ],
+  },
+  { label: 'Sat 3', date: '03', weekday: 'Sat', classes: [], blocked: true },
+  {
+    label: 'Sun 4',
+    date: '04',
+    weekday: 'Sun',
+    classes: [{ id: 'sd6', time: '10:00', type: 'Mat', duration: 50, booked: 8, capacity: 12 }],
+  },
+  {
+    label: 'Mon 5',
+    date: '05',
+    weekday: 'Mon',
+    classes: [
+      { id: 'sd7', time: '09:00', type: 'Reformer', duration: 55, booked: 3, capacity: 6 },
+      { id: 'sd8', time: '12:00', type: 'Mat', duration: 50, booked: 6, capacity: 12 },
+    ],
+  },
+];
+
 // Instructor dashboard mock
 export const instructorToday = {
   earningsThisWeek: 980,

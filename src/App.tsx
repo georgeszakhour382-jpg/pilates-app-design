@@ -9,6 +9,9 @@ import { MyBookings } from './screens/MyBookings';
 import { Search } from './screens/Search';
 import { Profile } from './screens/Profile';
 import { InstructorDashboard } from './screens/InstructorDashboard';
+import { Roster } from './screens/Roster';
+import { Earnings } from './screens/Earnings';
+import { EditSchedule } from './screens/EditSchedule';
 
 export type ScreenId =
   | 'onboarding'
@@ -19,9 +22,12 @@ export type ScreenId =
   | 'bookings'
   | 'search'
   | 'profile'
-  | 'instructor-dashboard';
+  | 'instructor-dashboard'
+  | 'edit-schedule'
+  | 'roster'
+  | 'earnings';
 
-const screens: { id: ScreenId; label: string; tone?: 'dark' | 'light' }[] = [
+const screens: { id: ScreenId; label: string; tone?: 'dark' | 'light'; group?: 'teach' }[] = [
   { id: 'onboarding', label: 'Onboarding', tone: 'light' },
   { id: 'discover', label: 'Discover' },
   { id: 'studio', label: 'Studio', tone: 'light' },
@@ -30,7 +36,10 @@ const screens: { id: ScreenId; label: string; tone?: 'dark' | 'light' }[] = [
   { id: 'bookings', label: 'My bookings' },
   { id: 'search', label: 'Search' },
   { id: 'profile', label: 'Profile' },
-  { id: 'instructor-dashboard', label: 'Teach' },
+  { id: 'instructor-dashboard', label: 'Teach', group: 'teach' },
+  { id: 'edit-schedule', label: 'Schedule', group: 'teach' },
+  { id: 'roster', label: 'Roster', group: 'teach' },
+  { id: 'earnings', label: 'Earnings', group: 'teach' },
 ];
 
 export default function App() {
@@ -54,21 +63,29 @@ export default function App() {
 
         {/* Screen switcher */}
         <div className="mt-5 -mx-6 overflow-x-auto px-6 pb-2 scrollbar-none">
-          <div className="flex gap-2">
-            {screens.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setActive(s.id)}
-                className={[
-                  'press-soft whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-medium transition-colors',
-                  active === s.id
-                    ? 'bg-ink text-bone'
-                    : 'bg-bone text-ink hover:bg-sand border border-stone/60',
-                ].join(' ')}
-              >
-                {s.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            {screens.map((s, i) => {
+              const prev = screens[i - 1];
+              const showDivider = !!prev && prev.group !== s.group;
+              return (
+                <span key={s.id} className="flex items-center gap-2">
+                  {showDivider && (
+                    <span className="mx-1 h-5 w-px bg-stone" aria-hidden />
+                  )}
+                  <button
+                    onClick={() => setActive(s.id)}
+                    className={[
+                      'press-soft whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-medium transition-colors',
+                      active === s.id
+                        ? 'bg-ink text-bone'
+                        : 'bg-bone text-ink hover:bg-sand border border-stone/60',
+                    ].join(' ')}
+                  >
+                    {s.label}
+                  </button>
+                </span>
+              );
+            })}
           </div>
         </div>
       </header>
@@ -108,5 +125,11 @@ function ScreenView({ id, goto }: { id: ScreenId; goto: (id: ScreenId) => void }
       return <Profile goto={goto} />;
     case 'instructor-dashboard':
       return <InstructorDashboard goto={goto} />;
+    case 'edit-schedule':
+      return <EditSchedule goto={goto} />;
+    case 'roster':
+      return <Roster goto={goto} />;
+    case 'earnings':
+      return <Earnings goto={goto} />;
   }
 }
