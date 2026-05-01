@@ -12,6 +12,7 @@ import {
   priceUsd,
 } from '../lib/displayAdapters';
 import { authStore } from '../lib/auth';
+import { useT } from '../lib/i18n';
 
 type Step = 'class' | 'time' | 'addons' | 'payment' | 'confirm';
 
@@ -22,6 +23,7 @@ export function Booking({
   goto: (id: ScreenId) => void;
   sessionId: string | null;
 }) {
+  const t = useT();
   const [step, setStep] = useState<Step>('class');
   const [addMat, setAddMat] = useState(false);
   const [pay, setPay] = useState<'card' | 'cash'>('card');
@@ -130,8 +132,8 @@ export function Booking({
     const e = createBooking.error;
     if (!e) return null;
     if (e instanceof ApiError) {
-      if (e.code === 'CONFLICT') return 'This class just filled up. Try another time.';
-      if (e.code === 'UNAUTHORIZED') return 'Sign in via Onboarding to confirm a booking.';
+      if (e.code === 'CONFLICT') return t('booking.class_full');
+      if (e.code === 'UNAUTHORIZED') return t('booking.sign_in_cta');
       // Catch backend unique-constraint failures (Prisma P2002 on
       // (customerId, classSessionId)) so the raw stack never reaches the
       // UI. Both the message and the bare error string get matched here
@@ -142,11 +144,11 @@ export function Booking({
         /already booked/i.test(msg) ||
         /classSessionId/.test(msg)
       ) {
-        return "You've already booked this class.";
+        return t('booking.already_booked');
       }
       return e.message;
     }
-    return 'Something went wrong. Please try again.';
+    return t('common.error');
   })();
 
   return (
@@ -161,7 +163,7 @@ export function Booking({
               <ChevronLeft size={18} />
             </button>
             <div className="flex-1">
-              <div className="label-eyebrow">Step {stepIndex[step]} of 4</div>
+              <div className="label-eyebrow">{t('booking.step_of', { n: stepIndex[step] })}</div>
               <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-stone">
                 <div
                   className="h-full bg-ink transition-all duration-300"
@@ -176,7 +178,7 @@ export function Booking({
       <div className="absolute inset-0 overflow-y-auto pt-[88px] pb-32 scrollbar-none">
         {step === 'class' && (
           <div className="fade-in px-5">
-            <h1 className="font-display text-[28px] leading-tight">Confirm your class</h1>
+            <h1 className="font-display text-[28px] leading-tight">{t('booking.heading_class')}</h1>
             <p className="mt-2 text-[13px] text-ink-60">
               {sess.studioName}
               {studio?.neighborhood ? ` · ${studio.neighborhood}` : ''}
@@ -200,7 +202,7 @@ export function Booking({
 
         {step === 'time' && (
           <div className="fade-in px-5">
-            <h1 className="font-display text-[28px] leading-tight">Confirm the time</h1>
+            <h1 className="font-display text-[28px] leading-tight">{t('booking.heading_time')}</h1>
             <p className="mt-2 text-[13px] text-ink-60">
               {classTypeLabel(sess.type)} with {sess.instructorName ?? 'TBA'}
             </p>
@@ -225,8 +227,8 @@ export function Booking({
 
         {step === 'addons' && (
           <div className="fade-in px-5">
-            <h1 className="font-display text-[28px] leading-tight">Anything else?</h1>
-            <p className="mt-2 text-[13px] text-ink-60">Add-ons are optional.</p>
+            <h1 className="font-display text-[28px] leading-tight">{t('booking.heading_addons')}</h1>
+            <p className="mt-2 text-[13px] text-ink-60">{t('booking.addons_sub')}</p>
 
             <ul className="mt-6 space-y-3">
               <li>
@@ -247,7 +249,7 @@ export function Booking({
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[15px] font-medium">Mat rental</span>
+                      <span className="text-[15px] font-medium">{t('booking.mat_rental')}</span>
                       <span className="num text-[14px]">+$3</span>
                     </div>
                     <p className="mt-1 text-[13px] text-ink-60">
@@ -261,8 +263,8 @@ export function Booking({
                   <div className="mt-0.5 grid h-6 w-6 place-items-center rounded-md border border-stone bg-bone" />
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[15px] font-medium">Towel service</span>
-                      <span className="text-[13px] text-ink-60">Included</span>
+                      <span className="text-[15px] font-medium">{t('booking.towel_service')}</span>
+                      <span className="text-[13px] text-ink-60">{t('booking.towel_included')}</span>
                     </div>
                     <p className="mt-1 text-[13px] text-ink-60">
                       Already part of your booking at {sess.studioName}.
@@ -276,13 +278,13 @@ export function Booking({
 
         {step === 'payment' && (
           <div className="fade-in px-5">
-            <h1 className="font-display text-[28px] leading-tight">How would you like to pay?</h1>
+            <h1 className="font-display text-[28px] leading-tight">{t('booking.heading_payment')}</h1>
 
             <ul className="mt-6 space-y-3">
               {(
                 [
-                  { id: 'card', icon: CreditCard, title: 'Card', sub: 'Visa ending 4242' },
-                  { id: 'cash', icon: Wallet, title: 'Cash at the studio', sub: 'Pay when you arrive' },
+                  { id: 'card', icon: CreditCard, title: t('booking.pay_card'), sub: 'Visa ending 4242' },
+                  { id: 'cash', icon: Wallet, title: t('booking.pay_cash'), sub: t('booking.pay_cash_sub') },
                 ] as const
               ).map((opt) => {
                 const Icon = opt.icon;
@@ -320,7 +322,7 @@ export function Booking({
             </ul>
 
             <section className="mt-7 rounded-2xl bg-sand/60 p-5">
-              <div className="label-eyebrow">Order</div>
+              <div className="label-eyebrow">{t('booking.order')}</div>
               <ul className="mt-3 space-y-2.5 text-[14px]">
                 <li className="flex justify-between">
                   <span>
@@ -335,7 +337,7 @@ export function Booking({
                   </li>
                 )}
                 <li className="hairline-t pt-3 flex justify-between text-[15px] font-medium">
-                  <span>Total</span>
+                  <span>{t('booking.total')}</span>
                   <span className="num">${total}.00</span>
                 </li>
               </ul>
@@ -383,7 +385,7 @@ export function Booking({
                 You&apos;re booked.
               </h1>
               <p className="mt-2 text-center text-[14px] text-ink-60">
-                We&apos;ll send the details to your phone shortly.
+                {t('booking.whatsapp_sent')}
               </p>
             </div>
 
@@ -415,7 +417,7 @@ export function Booking({
                 <li className="flex items-start gap-3">
                   <CreditCard size={14} className="mt-1 text-ink-60" />
                   <span>
-                    {pay === 'card' ? 'Charged $' : 'To pay at studio: $'}
+                    {pay === 'card' ? 'Charged $' : t('booking.pay_at_studio') + ': $'}
                     <span className="num">{total}.00</span>
                   </span>
                 </li>
@@ -424,10 +426,10 @@ export function Booking({
 
             <div className="mt-8 flex gap-2">
               <Button variant="tertiary" block onClick={() => goto('bookings')}>
-                See my bookings
+                {t('booking.see_my_bookings')}
               </Button>
               <Button block onClick={() => goto('discover')}>
-                Book another
+                {t('booking.book_another')}
               </Button>
             </div>
             <div className="h-8" />
@@ -441,7 +443,7 @@ export function Booking({
             step === 'payment' ? (
               <span>
                 Total <span className="num font-medium text-ink">${total}.00</span> ·{' '}
-                {pay === 'card' ? 'Card' : 'Pay at studio'}
+                {pay === 'card' ? t('booking.pay_card') : t('booking.pay_at_studio')}
               </span>
             ) : (
               <span>
@@ -454,10 +456,10 @@ export function Booking({
         >
           <Button block onClick={next} disabled={createBooking.isPending}>
             {createBooking.isPending
-              ? 'Confirming…'
+              ? t('booking.confirming')
               : step === 'payment'
-                ? 'Confirm and pay'
-                : 'Continue'}
+                ? t('booking.confirm_pay')
+                : t('booking.cont')}
           </Button>
         </StickyCTA>
       )}

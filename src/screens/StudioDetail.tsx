@@ -12,6 +12,7 @@ import { StudioMap } from '../components/shared/StudioMap';
 import { useToast } from '../components/ui/Toast';
 import { api } from '../lib/api';
 import { authStore } from '../lib/auth';
+import { useT } from '../lib/i18n';
 import {
   enrichInstructor,
   enrichSession,
@@ -30,6 +31,7 @@ export function StudioDetail({
   slug: string | null;
   setActiveSessionId?: (id: string | null) => void;
 }) {
+  const t = useT();
   const studioQuery = useQuery({
     queryKey: ['studios.getBySlug', slug],
     queryFn: () => {
@@ -77,7 +79,9 @@ export function StudioDetail({
     enabled: signedIn,
   });
   const bookedSessionIds = new Set(
-    (myBookingsQuery.data?.items ?? []).map((b) => b.classSessionId),
+    (myBookingsQuery.data?.items ?? [])
+      .filter((b) => b.status !== 'CANCELLED' && b.status !== 'REFUNDED')
+      .map((b) => b.classSessionId),
   );
 
   const toast = useToast();
@@ -102,12 +106,12 @@ export function StudioDetail({
     return (
       <div className="grid h-full place-items-center bg-bone p-6 text-center">
         <div>
-          <p className="font-display text-[20px]">Studio not found</p>
+          <p className="font-display text-[20px]">{t('studio.not_found')}</p>
           <button
             onClick={() => goto('discover')}
             className="mt-3 text-[13px] font-medium text-clay underline"
           >
-            Back to Discover
+            {t('studio.back_to_discover')}
           </button>
         </div>
       </div>
@@ -205,8 +209,8 @@ export function StudioDetail({
         {/* Schedule with sticky day picker */}
         <section className="mt-9">
           <div className="px-5">
-            <div className="label-eyebrow">Schedule</div>
-            <h2 className="font-display mt-1 text-[22px]">Pick a day</h2>
+            <div className="label-eyebrow">{t('studio.schedule')}</div>
+            <h2 className="font-display mt-1 text-[22px]">{t('studio.pick_a_day')}</h2>
           </div>
           <div className="sticky top-0 z-10 mt-3 -mx-0 bg-bone/95 backdrop-blur-sm">
             <div className="flex gap-2 overflow-x-auto px-5 py-2 scrollbar-none">
@@ -223,7 +227,7 @@ export function StudioDetail({
             <div className="h-px bg-stone/70" />
           </div>
           {sessionsQuery.isLoading && (
-            <p className="mt-4 px-5 text-[13px] text-ink-60">Loading classes…</p>
+            <p className="mt-4 px-5 text-[13px] text-ink-60">{t('studio.schedule_loading')}</p>
           )}
           {sessionsQuery.error && (
             <p className="mt-4 px-5 text-[13px] text-terracotta">
@@ -231,7 +235,7 @@ export function StudioDetail({
             </p>
           )}
           {!sessionsQuery.isLoading && sessionsForDay.length === 0 && (
-            <p className="mt-4 px-5 text-[13px] text-ink-60">No classes on this day.</p>
+            <p className="mt-4 px-5 text-[13px] text-ink-60">{t('studio.no_classes')}</p>
           )}
           <ul className="mt-3 space-y-2 px-5">
             {sessionsForDay.map((s) => {
@@ -246,7 +250,7 @@ export function StudioDetail({
                     alreadyBooked={alreadyBooked}
                     onClick={() => {
                       if (alreadyBooked) {
-                        toast.show('You already booked this class.', 'info');
+                        toast.show(t('studio.already_booked_class'), 'info');
                         return;
                       }
                       setActiveSessionId?.(s.id);
@@ -262,8 +266,8 @@ export function StudioDetail({
         {/* Teaching here — real instructors from the backend */}
         {instructorsQuery.data && instructorsQuery.data.length > 0 && (
           <section className="mt-9 px-5">
-            <div className="label-eyebrow">Teaching here</div>
-            <h2 className="font-display mt-1 text-[22px]">Instructors</h2>
+            <div className="label-eyebrow">{t('studio.teaching_here')}</div>
+            <h2 className="font-display mt-1 text-[22px]">{t('studio.instructors')}</h2>
             <ul className="mt-4 space-y-4">
               {instructorsQuery.data.map((i) => (
                 <li key={i.id}>
@@ -281,7 +285,7 @@ export function StudioDetail({
         <section className="mt-9 px-5">
           <div className="flex items-baseline justify-between">
             <div>
-              <div className="label-eyebrow">From regulars</div>
+              <div className="label-eyebrow">{t('studio.reviews_eyebrow')}</div>
               <h2 className="font-display mt-1 text-[22px]">{studio.reviewCount} reviews</h2>
             </div>
             <button className="text-[12px] font-medium text-ink-60">See all</button>
@@ -315,7 +319,7 @@ export function StudioDetail({
           if (!coords) return null;
           return (
             <section className="mt-9 px-5">
-              <div className="label-eyebrow">Find it</div>
+              <div className="label-eyebrow">{t('studio.find_it')}</div>
               <h2 className="font-display mt-1 text-[22px]">{studio.address}</h2>
               <StudioMap lat={coords.lat} lng={coords.lng} className="mt-3" />
             </section>
@@ -326,7 +330,7 @@ export function StudioDetail({
         <section className="mt-7 mx-5 rounded-2xl border border-stone p-4">
           <div className="flex items-center gap-2 text-[13px] font-medium">
             <Clock size={14} />
-            Cancellation
+            {t('studio.cancellation')}
           </div>
           <p className="mt-1 text-[13px] leading-[1.55] text-ink-60">
             Free cancellation up to {studio.cancellationHours} hours before class. After that, the
@@ -341,11 +345,11 @@ export function StudioDetail({
         info={
           nextSession ? (
             <span>
-              Next class · <span className="font-medium text-ink">{enrichSession(nextSession).startsAt}</span> · from $
+              {t('studio.next_class')} · <span className="font-medium text-ink">{enrichSession(nextSession).startsAt}</span> · from $
               <span className="num">{studio.priceFrom}</span>
             </span>
           ) : (
-            <span>No upcoming classes</span>
+            <span>{t('discover.no_match')}</span>
           )
         }
       >
@@ -362,11 +366,11 @@ export function StudioDetail({
               setActiveSessionId?.(target.id);
               goto('booking');
             } else if (candidates.length > 0) {
-              toast.show("You've already booked every upcoming class here.", 'info');
+              toast.show(t('studio.already_booked_all'), 'info');
             }
           }}
         >
-          Book a class
+          {t('studio.book_a_class')}
         </Button>
       </StickyCTA>
     </div>

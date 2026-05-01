@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import type { ScreenId } from '../App';
 import { api, ApiError } from '../lib/api';
 import { authStore } from '../lib/auth';
+import { useT } from '../lib/i18n';
 
 const slides = [
   {
@@ -31,6 +32,7 @@ type Step = 0 | 1 | 2 | 'phone' | 'code';
 const PHONE_RE = /^\+961\d{7,8}$/;
 
 export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
+  const t = useT();
   const [step, setStep] = useState<Step>(0);
   const [role, setRole] = useState<Role | null>(null);
   const [phone, setPhone] = useState('+96170000001');
@@ -93,7 +95,7 @@ export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
               onClick={() => setStep(step === 0 ? 1 : 2)}
               trailing={<ArrowRight size={18} />}
             >
-              {step === 0 ? 'Continue' : 'Sounds good'}
+              {step === 0 ? t('onboarding.next') : t('onboarding.sounds_good')}
             </Button>
           </div>
         </div>
@@ -105,7 +107,7 @@ export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
   if (step === 2) {
     return (
       <div className="fade-in flex h-full flex-col bg-bone px-6 pt-16 pb-10">
-        <div className="label-eyebrow">Welcome</div>
+        <div className="label-eyebrow">{t('onboarding.welcome')}</div>
         <h1 className="font-display mt-3 text-[32px] leading-[1.1]">
           Are you here to <em className="italic">practice</em>, or to{' '}
           <em className="italic">teach</em>?
@@ -119,14 +121,14 @@ export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
               {
                 id: 'client' as const,
                 icon: User,
-                title: 'Practising',
-                body: 'Find studios, book classes, track sessions.',
+                title: t('onboarding.role_practising'),
+                body: t('onboarding.role_practising_sub'),
               },
               {
                 id: 'instructor' as const,
                 icon: Sparkles,
-                title: 'Teaching',
-                body: 'Manage your schedule, students and earnings.',
+                title: t('onboarding.role_teaching'),
+                body: t('onboarding.role_teaching_sub'),
               },
             ]
           ).map((opt) => {
@@ -183,13 +185,13 @@ export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
         <div className="grid h-16 w-16 place-items-center rounded-full bg-sand">
           <Phone size={26} strokeWidth={1.6} />
         </div>
-        <h1 className="font-display mt-7 text-[30px] leading-[1.1]">What&apos;s your number?</h1>
+        <h1 className="font-display mt-7 text-[30px] leading-[1.1]">{t('onboarding.phone_title')}</h1>
         <p className="mt-3 text-[15px] leading-[1.55] text-ink-60">
-          We&apos;ll text you a 6-digit code. No password to remember.
+          {t('onboarding.phone_sub')}
         </p>
 
         <label className="mt-7 block">
-          <span className="label-eyebrow">Mobile</span>
+          <span className="label-eyebrow">{t('onboarding.phone_label')}</span>
           <input
             type="tel"
             inputMode="tel"
@@ -200,7 +202,7 @@ export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
             className="num mt-2 h-12 w-full rounded-xl border border-stone bg-bone px-4 text-[16px] focus:border-ink focus:outline-none"
           />
           <span className="mt-1.5 block text-[12px] text-ink-60">
-            Lebanon only · format <span className="num">+961…</span>
+            {t('onboarding.phone_help')}
           </span>
         </label>
 
@@ -219,10 +221,10 @@ export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
             disabled={!phoneOk || sendOtp.isPending}
             onClick={() => sendOtp.mutate(phone.trim())}
           >
-            {sendOtp.isPending ? 'Sending…' : 'Send code'}
+            {sendOtp.isPending ? t('onboarding.sending') : t('onboarding.send_code')}
           </Button>
           <Button block variant="ghost" onClick={() => goto('discover')}>
-            Browse without an account
+            {t('onboarding.browse_guest')}
           </Button>
         </div>
       </div>
@@ -232,15 +234,15 @@ export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
   // OTP code entry
   return (
     <div className="fade-in flex h-full flex-col bg-bone px-6 pt-16 pb-10">
-      <div className="label-eyebrow">Code sent to</div>
+      <div className="label-eyebrow">{t('onboarding.code_to')}</div>
       <div className="num mt-1 text-[14px] font-medium">{phone}</div>
-      <h1 className="font-display mt-5 text-[30px] leading-[1.1]">Enter the 6-digit code</h1>
+      <h1 className="font-display mt-5 text-[30px] leading-[1.1]">{t('onboarding.code_title')}</h1>
       <p className="mt-3 text-[15px] leading-[1.55] text-ink-60">
         Local-dev mode accepts <span className="num font-medium">123456</span> for any phone.
       </p>
 
       <label className="mt-7 block">
-        <span className="label-eyebrow">Code</span>
+        <span className="label-eyebrow">{t('onboarding.code_label')}</span>
         <input
           type="text"
           inputMode="numeric"
@@ -270,10 +272,10 @@ export function Onboarding({ goto }: { goto: (id: ScreenId) => void }) {
           disabled={code.length !== 6 || verifyOtp.isPending}
           onClick={() => verifyOtp.mutate({ p: phone.trim(), c: code })}
         >
-          {verifyOtp.isPending ? 'Verifying…' : 'Verify and continue'}
+          {verifyOtp.isPending ? t('onboarding.verifying') : t('onboarding.verify')}
         </Button>
         <Button block variant="ghost" onClick={() => setStep('phone')}>
-          Use a different number
+          {t('onboarding.different_number')}
         </Button>
       </div>
     </div>

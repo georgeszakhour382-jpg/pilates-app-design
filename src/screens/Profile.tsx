@@ -19,6 +19,7 @@ import { Sheet } from '../components/ui/Sheet';
 import { useToast } from '../components/ui/Toast';
 import { api } from '../lib/api';
 import { authStore } from '../lib/auth';
+import { useI18n, type Lang } from '../lib/i18n';
 
 type RowId = 'pay' | 'lang' | 'city' | 'notif' | 'priv' | 'help';
 
@@ -37,8 +38,6 @@ const LANG_OPTIONS = [
 
 const CITY_OPTIONS = ['Beirut', 'Jounieh', 'Tripoli', 'Saida', 'Tyre', 'Zahlé', 'Byblos'];
 
-type LangValue = (typeof LANG_OPTIONS)[number]['value'];
-
 function readPref<T extends string>(key: string, fallback: T): T {
   const v = window.localStorage.getItem(key);
   return (v as T) || fallback;
@@ -47,9 +46,9 @@ function readPref<T extends string>(key: string, fallback: T): T {
 export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
   const signedIn = !!authStore.accessToken();
   const toast = useToast();
+  const { lang, setLang, t } = useI18n();
 
   const [openSheet, setOpenSheet] = useState<RowId | null>(null);
-  const [lang, setLang] = useState<LangValue>(() => readPref<LangValue>('pilates:lang', 'en'));
   const [city, setCity] = useState<string>(() => readPref<string>('pilates:city', 'Beirut'));
   const [notifWA, setNotifWA] = useState<boolean>(
     () => (window.localStorage.getItem('pilates:notif:whatsapp') ?? '1') === '1',
@@ -58,8 +57,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
     () => (window.localStorage.getItem('pilates:notif:push') ?? '1') === '1',
   );
 
-  // Persist preference changes immediately.
-  useEffect(() => window.localStorage.setItem('pilates:lang', lang), [lang]);
+  // Persist non-i18n prefs immediately. (Lang is persisted by I18nProvider.)
   useEffect(() => window.localStorage.setItem('pilates:city', city), [city]);
   useEffect(
     () => window.localStorage.setItem('pilates:notif:whatsapp', notifWA ? '1' : '0'),
@@ -101,18 +99,16 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
       <div className="fade-in relative h-full bg-bone">
         <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
           <header className="px-5 pt-14">
-            <div className="label-eyebrow">Account</div>
-            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Profile</h1>
+            <div className="label-eyebrow">{t('profile.account_eyebrow')}</div>
+            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t('profile.title')}</h1>
           </header>
           <div className="mt-10 px-5">
             <div className="rounded-2xl border border-dashed border-stone bg-bone px-5 py-10 text-center">
               <UserPlus size={20} className="mx-auto text-ink-60" />
-              <h3 className="font-display mt-3 text-[20px]">Sign in to see your profile</h3>
-              <p className="mt-1.5 text-[13px] text-ink-60">
-                Onboarding takes 30 seconds. We&apos;ll text you a code.
-              </p>
+              <h3 className="font-display mt-3 text-[20px]">{t('profile.sign_in_title')}</h3>
+              <p className="mt-1.5 text-[13px] text-ink-60">{t('profile.sign_in_sub')}</p>
               <Button size="md" className="mt-5" onClick={() => goto('onboarding')}>
-                Sign in
+                {t('common.sign_in')}
               </Button>
             </div>
           </div>
@@ -144,14 +140,14 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
     'Off';
 
   const account: Row[] = [
-    { id: 'pay', label: 'Payment methods', hint: 'Cash · card via studio', icon: CreditCard },
-    { id: 'lang', label: 'Language', hint: langLabel, icon: Languages },
-    { id: 'city', label: 'City', hint: city, icon: Globe },
-    { id: 'notif', label: 'Notifications', hint: notifChannels, icon: Bell },
+    { id: 'pay', label: t('profile.payment_methods'), hint: 'Cash · card', icon: CreditCard },
+    { id: 'lang', label: t('profile.language'), hint: langLabel, icon: Languages },
+    { id: 'city', label: t('profile.city'), hint: city, icon: Globe },
+    { id: 'notif', label: t('profile.notifications'), hint: notifChannels, icon: Bell },
   ];
   const support: Row[] = [
-    { id: 'priv', label: 'Privacy & data', hint: '', icon: ShieldCheck },
-    { id: 'help', label: 'Help', hint: '', icon: HelpCircle },
+    { id: 'priv', label: t('profile.privacy'), hint: '', icon: ShieldCheck },
+    { id: 'help', label: t('profile.help'), hint: '', icon: HelpCircle },
   ];
 
   const exportMine = async () => {
@@ -175,9 +171,9 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.show('Your data export is downloading.');
+      toast.show(t('profile.download_started'));
     } catch {
-      toast.show("Couldn't export — try again.", 'warn');
+      toast.show(t('profile.download_failed'), 'warn');
     }
   };
 
@@ -185,8 +181,8 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
         <header className="px-5 pt-14">
-          <div className="label-eyebrow">Account</div>
-          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Profile</h1>
+          <div className="label-eyebrow">{t('profile.account_eyebrow')}</div>
+          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t('profile.title')}</h1>
         </header>
 
         {/* Identity card */}
@@ -205,32 +201,32 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-            <Stat label="Sessions" value={String(totalSessions)} />
-            <Stat label="Studios" value={String(distinctStudios)} />
-            <Stat label="Upcoming" value={String(upcomingCount)} />
+            <Stat label={t('profile.sessions')} value={String(totalSessions)} />
+            <Stat label={t('profile.studios')} value={String(distinctStudios)} />
+            <Stat label={t('profile.upcoming')} value={String(upcomingCount)} />
           </div>
         </section>
 
         {/* Membership — placeholder until backend exposes Subscription self-view */}
         <section className="mt-5 mx-5 rounded-[20px] border border-stone bg-bone p-5">
-          <div className="label-eyebrow">Membership</div>
+          <div className="label-eyebrow">{t('profile.membership')}</div>
           <div className="mt-2 flex items-center justify-between">
             <div>
-              <div className="font-display text-[20px]">Open Plan</div>
-              <p className="mt-0.5 text-[12px] text-ink-60">Pay per class · no commitment</p>
+              <div className="font-display text-[20px]">{t('profile.open_plan')}</div>
+              <p className="mt-0.5 text-[12px] text-ink-60">{t('profile.open_plan_sub')}</p>
             </div>
             <button
               onClick={() => goto('discover')}
               className="press-soft rounded-full bg-clay px-4 py-2 text-[12px] font-medium text-bone"
             >
-              Upgrade
+              {t('profile.upgrade')}
             </button>
           </div>
         </section>
 
         {/* Account list */}
-        <List title="Account" rows={account} onOpen={(id) => setOpenSheet(id)} />
-        <List title="Support" rows={support} onOpen={(id) => setOpenSheet(id)} />
+        <List title={t('profile.account')} rows={account} onOpen={(id) => setOpenSheet(id)} />
+        <List title={t('profile.support')} rows={support} onOpen={(id) => setOpenSheet(id)} />
 
         <div className="mt-9 px-5">
           <button
@@ -239,7 +235,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
             className="press-soft inline-flex items-center gap-2 text-[14px] text-ink-60 disabled:opacity-50"
           >
             <LogOut size={14} />
-            {signOutMutation.isPending ? 'Signing out…' : 'Sign out'}
+            {signOutMutation.isPending ? t('common.loading') : t('common.sign_out')}
           </button>
         </div>
 
@@ -254,7 +250,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
           containment styling applies. */}
       <Sheet
         open={openSheet === 'lang'}
-        title="Language"
+        title={t('profile.language')}
         onClose={() => setOpenSheet(null)}
       >
         <ul className="space-y-2">
@@ -264,9 +260,9 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
               <li key={opt.value}>
                 <button
                   onClick={() => {
-                    setLang(opt.value);
+                    setLang(opt.value as Lang);
                     setOpenSheet(null);
-                    toast.show(`Language set to ${opt.label}.`);
+                    toast.show(t('profile.lang_set', { lang: opt.label }));
                   }}
                   className={[
                     'press-soft flex w-full items-center justify-between rounded-2xl border bg-bone px-4 py-3 text-start',
@@ -286,7 +282,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
         </p>
       </Sheet>
 
-      <Sheet open={openSheet === 'city'} title="City" onClose={() => setOpenSheet(null)}>
+      <Sheet open={openSheet === 'city'} title={t('profile.city')} onClose={() => setOpenSheet(null)}>
         <ul className="space-y-2">
           {CITY_OPTIONS.map((c) => {
             const sel = city === c;
@@ -296,7 +292,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
                   onClick={() => {
                     setCity(c);
                     setOpenSheet(null);
-                    toast.show(`City set to ${c}.`);
+                    toast.show(t('profile.city_set', { city: c }));
                   }}
                   className={[
                     'press-soft flex w-full items-center justify-between rounded-2xl border bg-bone px-4 py-3 text-start',
@@ -314,7 +310,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
 
       <Sheet
         open={openSheet === 'notif'}
-        title="Notifications"
+        title={t('profile.notifications')}
         onClose={() => setOpenSheet(null)}
       >
         <ul className="space-y-3">
@@ -342,7 +338,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
         </p>
       </Sheet>
 
-      <Sheet open={openSheet === 'pay'} title="Payment methods" onClose={() => setOpenSheet(null)}>
+      <Sheet open={openSheet === 'pay'} title={t('profile.payment_methods')} onClose={() => setOpenSheet(null)}>
         <div className="rounded-2xl border border-stone bg-bone p-4">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-sand">
@@ -361,7 +357,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
         </p>
       </Sheet>
 
-      <Sheet open={openSheet === 'priv'} title="Privacy & data" onClose={() => setOpenSheet(null)}>
+      <Sheet open={openSheet === 'priv'} title={t('profile.privacy')} onClose={() => setOpenSheet(null)}>
         <div className="space-y-3">
           <div className="rounded-2xl border border-stone bg-bone p-4">
             <div className="text-[15px] font-medium">Download my data</div>
@@ -391,7 +387,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
         </div>
       </Sheet>
 
-      <Sheet open={openSheet === 'help'} title="Help" onClose={() => setOpenSheet(null)}>
+      <Sheet open={openSheet === 'help'} title={t('profile.help')} onClose={() => setOpenSheet(null)}>
         <ul className="space-y-3 text-[14px]">
           <li className="rounded-2xl border border-stone bg-bone p-4">
             <div className="font-medium">Booking didn&apos;t go through?</div>

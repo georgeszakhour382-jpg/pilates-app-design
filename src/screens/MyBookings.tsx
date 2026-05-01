@@ -7,6 +7,7 @@ import { useToast } from '../components/ui/Toast';
 import { api, ApiError, type BookingSummary } from '../lib/api';
 import { authStore } from '../lib/auth';
 import { enrichBooking } from '../lib/displayAdapters';
+import { useT } from '../lib/i18n';
 import { studios as mockStudios } from '../data/mock';
 
 const FALLBACK_HERO =
@@ -24,6 +25,7 @@ const neighborhoodForStudio = (studioId: string, studioName: string): string | n
 
 export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
   const signedIn = !!authStore.accessToken();
+  const t = useT();
 
   const upcomingQuery = useQuery({
     queryKey: ['bookings.listMine', 'UPCOMING'],
@@ -61,10 +63,10 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
       if (ctx?.prev) {
         qc.setQueryData(['bookings.listMine', 'UPCOMING'], ctx.prev);
       }
-      toast.show("Couldn't cancel — try again.", 'warn');
+      toast.show(t('bookings.cancel_failed'), 'warn');
     },
     onSuccess: () => {
-      toast.show('You successfully cancelled your booking.');
+      toast.show(t('bookings.cancel_success'));
       // Cross-screen invalidation: the cancelled session should now be
       // available again on StudioDetail's schedule (and any 'already
       // booked' grayed state must clear too).
@@ -79,18 +81,18 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
       <div className="fade-in relative h-full bg-bone">
         <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
           <header className="px-5 pt-14">
-            <div className="label-eyebrow">Your practice</div>
-            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Bookings</h1>
+            <div className="label-eyebrow">{t('bookings.practice')}</div>
+            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t('bookings.title')}</h1>
           </header>
           <div className="mt-10 px-5">
             <div className="rounded-2xl border border-dashed border-stone bg-bone px-5 py-10 text-center">
               <Calendar size={20} className="mx-auto text-ink-60" />
-              <h3 className="font-display mt-3 text-[20px]">Sign in to see your bookings</h3>
+              <h3 className="font-display mt-3 text-[20px]">{t('bookings.sign_in_title')}</h3>
               <p className="mt-1.5 text-[13px] text-ink-60">
-                Onboarding takes 30 seconds. We&apos;ll text you a code.
+                {t('bookings.sign_in_sub')}
               </p>
               <Button size="md" className="mt-5" onClick={() => goto('onboarding')}>
-                Sign in
+                {t('common.sign_in')}
               </Button>
             </div>
           </div>
@@ -100,37 +102,42 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
     );
   }
 
-  const upcoming = (upcomingQuery.data?.items ?? []).map(enrichBooking);
+  // Backend's `listMine UPCOMING` filters by class start time but doesn't
+  // exclude CANCELLED — see marketplace issue. Filter client-side until that
+  // ships so cancelled-but-still-future-dated bookings don't reappear.
+  const upcoming = (upcomingQuery.data?.items ?? [])
+    .filter((b) => b.status !== 'CANCELLED' && b.status !== 'REFUNDED')
+    .map(enrichBooking);
   const past = (pastQuery.data?.items ?? []).map(enrichBooking);
 
   return (
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
         <header className="px-5 pt-14">
-          <div className="label-eyebrow">Your practice</div>
-          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Bookings</h1>
+          <div className="label-eyebrow">{t('bookings.practice')}</div>
+          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t('bookings.title')}</h1>
         </header>
 
         {/* Upcoming */}
         <section className="mt-6 px-5">
           <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-[20px]">Upcoming</h2>
+            <h2 className="font-display text-[20px]">{t('bookings.upcoming')}</h2>
             <button
               onClick={() => goto('discover')}
               className="press-soft inline-flex items-center gap-1 text-[12px] font-medium text-ink-60"
             >
-              <Plus size={14} /> Book
+              <Plus size={14} /> {t('bookings.book')}
             </button>
           </div>
 
           {upcomingQuery.isLoading && (
-            <p className="mt-4 text-[13px] text-ink-60">Loading…</p>
+            <p className="mt-4 text-[13px] text-ink-60">{t('common.loading')}</p>
           )}
           {upcomingQuery.error && (
             <p className="mt-4 text-[13px] text-terracotta">
               {upcomingQuery.error instanceof ApiError
                 ? upcomingQuery.error.message
-                : 'Could not load bookings.'}
+                : t('common.error')}
             </p>
           )}
 
@@ -165,7 +172,7 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
                       <div className="absolute inset-0 flex flex-col justify-between p-5 text-bone">
                         <div className="flex items-center justify-between">
                           <span className="rounded-full bg-bone/20 px-2.5 py-1 text-[11px] font-medium tracking-wide backdrop-blur-sm">
-                            {next ? 'Next class' : 'Upcoming'}
+                            {next ? t('bookings.next_class') : t('bookings.upcoming')}
                             {b.countdown ? ` · ${b.countdown}` : ''}
                           </span>
                           <span className="num text-[12px] text-bone/85">{b.date}</span>
@@ -190,19 +197,19 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
                         onClick={() => goto('discover')}
                         className="press-soft flex-1 text-[13px] font-medium underline underline-offset-4"
                       >
-                        Book another
+                        {t('booking.book_another')}
                       </button>
                       <span className="h-4 w-px bg-stone" />
                       <button
                         disabled={!cancellable || cancel.isPending}
                         onClick={() => {
-                          if (window.confirm('Cancel this booking?')) {
+                          if (window.confirm(t('bookings.cancel_confirm'))) {
                             cancel.mutate(b.id);
                           }
                         }}
                         className="press-soft flex-1 text-[13px] font-medium text-ink-60 underline underline-offset-4 disabled:opacity-50"
                       >
-                        {cancel.isPending ? 'Cancelling…' : 'Cancel · free'}
+                        {cancel.isPending ? t('bookings.cancelling') : t('bookings.cancel_free')}
                       </button>
                     </div>
                   </div>
@@ -217,7 +224,7 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
 
         {/* Past */}
         <section className="mt-9 px-5">
-          <h2 className="font-display text-[20px]">Past</h2>
+          <h2 className="font-display text-[20px]">{t('bookings.past')}</h2>
           {pastQuery.isLoading && (
             <p className="mt-4 text-[13px] text-ink-60">Loading…</p>
           )}
@@ -237,7 +244,7 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
                       <span className="text-[14.5px] font-medium">{b.studioName}</span>
                       {cancelled && (
                         <span className="rounded-full bg-stone-soft px-2 py-0.5 text-[10px] font-medium text-ink-60">
-                          Cancelled
+                          {t('bookings.cancelled')}
                         </span>
                       )}
                     </div>
@@ -249,13 +256,13 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
                     onClick={() => goto('discover')}
                     className="press-soft text-[12px] font-medium text-ink-60 underline underline-offset-4"
                   >
-                    Rebook
+                    {t('bookings.book')}
                   </button>
                 </li>
               );
             })}
             {!pastQuery.isLoading && past.length === 0 && (
-              <li className="py-4 text-[13px] text-ink-60">No past bookings yet.</li>
+              <li className="py-4 text-[13px] text-ink-60">{t('bookings.no_past')}</li>
             )}
           </ul>
         </section>
@@ -267,16 +274,17 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
 }
 
 function EmptyUpcoming({ onAction }: { onAction: () => void }) {
+  const t = useT();
   return (
     <li>
       <div className="rounded-2xl border border-dashed border-stone bg-bone px-5 py-10 text-center">
         <Calendar size={20} className="mx-auto text-ink-60" />
-        <h3 className="font-display mt-3 text-[20px]">No bookings yet.</h3>
+        <h3 className="font-display mt-3 text-[20px]">{t('bookings.empty_title')}</h3>
         <p className="mt-1.5 text-[13px] text-ink-60">
-          Find a class you like — most studios open 4 weeks ahead.
+          {t('bookings.empty_sub')}
         </p>
         <Button size="md" className="mt-5" onClick={onAction}>
-          Browse studios
+          {t('bookings.browse')}
         </Button>
       </div>
     </li>

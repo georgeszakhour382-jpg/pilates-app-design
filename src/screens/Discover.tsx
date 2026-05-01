@@ -9,6 +9,7 @@ import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
 import { api, type InstructorSummary } from '../lib/api';
 import { enrichInstructor, enrichStudio } from '../lib/displayAdapters';
+import { useT } from '../lib/i18n';
 
 const categories: ClassType[] = ['Reformer', 'Mat', 'Pre/postnatal', 'Contemporary', 'Clinical'];
 
@@ -21,6 +22,7 @@ export function Discover({
 }) {
   const [cat, setCat] = useState<ClassType | 'All'>('All');
 
+  const t = useT();
   const studiosQuery = useQuery({
     queryKey: ['studios.list'],
     queryFn: () => api.studios.list(),
@@ -63,9 +65,10 @@ export function Discover({
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
         <header className="px-5 pt-14">
-          <div className="label-eyebrow">Beirut · {today}</div>
+          <div className="label-eyebrow">{t('discover.eyebrow')} · {today}</div>
           <h1 className="font-display mt-1 text-[30px] leading-[1.1]">
-            Find your <em className="italic">next</em> class.
+            {t('discover.heading_1')} <em className="italic">{t('discover.heading_em')}</em>{' '}
+            {t('discover.heading_2')}
           </h1>
         </header>
 
@@ -76,7 +79,7 @@ export function Discover({
             className="press-soft flex h-12 w-full items-center gap-3 rounded-full bg-sand px-4 text-start"
           >
             <Search size={18} className="text-ink-60" />
-            <span className="text-[14px] text-ink-60">Studio, neighborhood, instructor…</span>
+            <span className="text-[14px] text-ink-60">{t('discover.search_placeholder')}</span>
             <span className="ml-auto rounded-full bg-bone p-1.5 text-ink">
               <SlidersHorizontal size={14} />
             </span>
@@ -85,7 +88,7 @@ export function Discover({
 
         {/* Categories */}
         <div className="mt-7 px-5">
-          <div className="label-eyebrow">Practice</div>
+          <div className="label-eyebrow">{t('discover.practice')}</div>
           <div className="mt-2 -mx-5 flex gap-2 overflow-x-auto px-5 scrollbar-none">
             <Chip selected={cat === 'All'} onClick={() => setCat('All')}>
               All
@@ -102,10 +105,10 @@ export function Discover({
         <section className="mt-9">
           <div className="flex items-end justify-between px-5">
             <div>
-              <div className="label-eyebrow">Near you</div>
-              <h2 className="font-display mt-1 text-[22px]">Studios within 15 min</h2>
+              <div className="label-eyebrow">{t('discover.near_you')}</div>
+              <h2 className="font-display mt-1 text-[22px]">{t('discover.near_you_sub')}</h2>
             </div>
-            <button className="text-[12px] font-medium text-ink-60">See all</button>
+            <button className="text-[12px] font-medium text-ink-60">{t('discover.see_all')}</button>
           </div>
           <div className="mt-4 -mx-5 flex gap-3 overflow-x-auto px-5 pb-2 scrollbar-none">
             {studiosQuery.isLoading && (
@@ -129,7 +132,7 @@ export function Discover({
               />
             ))}
             {!studiosQuery.isLoading && studios.length === 0 && (
-              <p className="px-5 text-[13px] text-ink-60">No studios match this practice.</p>
+              <p className="px-5 text-[13px] text-ink-60">{t('discover.no_match')}</p>
             )}
           </div>
         </section>
@@ -138,8 +141,8 @@ export function Discover({
             reviewCount come from the merged mock until backend exposes them. */}
         {allInstructors.length > 0 && (
           <section className="mt-9 px-5">
-            <div className="label-eyebrow">This week</div>
-            <h2 className="font-display mt-1 text-[22px]">Teachers our regulars rebook</h2>
+            <div className="label-eyebrow">{t('discover.this_week')}</div>
+            <h2 className="font-display mt-1 text-[22px]">{t('discover.this_week_sub')}</h2>
             <ul className="mt-4 space-y-4">
               {allInstructors.slice(0, 4).map((i) => {
                 const enriched = enrichInstructor(i);
@@ -179,7 +182,7 @@ export function Discover({
                 }}
               />
               <div className="absolute inset-x-0 bottom-0 p-5 text-bone">
-                <div className="label-eyebrow !text-bone/70">Why we love it</div>
+                <div className="label-eyebrow !text-bone/70">{t('discover.why_we_love')}</div>
                 <h3 className="font-display mt-1 text-[26px] leading-tight">{editorial.name}</h3>
                 <p className="mt-2 text-[14px] leading-[1.55] text-bone/85">{editorial.loved}</p>
                 <button
@@ -189,7 +192,7 @@ export function Discover({
                   }}
                   className="press-soft mt-5 inline-flex h-10 items-center rounded-full bg-bone px-5 text-[13px] font-medium text-ink"
                 >
-                  Read more
+                  {t('discover.read_more')}
                 </button>
               </div>
             </div>
