@@ -165,6 +165,61 @@ export interface CreateBookingResult {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Staff-facing types (instructor / manager / owner).
+// ──────────────────────────────────────────────────────────────────────────
+
+export interface ClassTemplateSummary {
+  id: string;
+  studioId: string;
+  name: string;
+  type: ClassType;
+  durationMinutes: number;
+  defaultCapacity: number;
+  defaultWaitlistCap: number;
+  rrule: string | null;
+  price: MoneyWire;
+  cancellationWindowMinutes: number | null;
+  introClass: boolean;
+}
+
+export interface RosterEntry {
+  bookingId: string;
+  customerId: string;
+  customerFullName: string;
+  customerPhone: string;
+  status: BookingStatus;
+  waitlistPosition: number | null;
+  checkedInAt: string | null;
+  cancelledAt: string | null;
+  price: MoneyWire;
+  paidVia: 'ONLINE' | 'CASH_AT_STUDIO' | 'PACKAGE_CREDIT' | 'UNPAID';
+}
+
+export interface StudioSessionRow extends ClassSessionSummary {
+  classTemplateId: string | null;
+  instructorId: string | null;
+}
+
+export interface ReportsSummary {
+  range: 'TODAY' | 'WEEK' | 'MONTH';
+  windowStart: string;
+  windowEnd: string;
+  bookings: {
+    confirmed: number;
+    cancelled: number;
+    checkedIn: number;
+    noShow: number;
+    fillRatePct: number;
+  };
+  revenue: {
+    online: MoneyWire;
+    cash: MoneyWire;
+    refunded: MoneyWire;
+    net: MoneyWire;
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Procedures grouped by router for ergonomic call sites.
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -205,6 +260,65 @@ export const api = {
       }),
     cancel: (bookingId: string) =>
       trpcMutation<BookingSummary>('bookings.cancel', { bookingId }),
+    // Staff-only — JWT must be a STUDIO_OWNER / MANAGER / INSTRUCTOR.
+    studioRoster: (classSessionId: string) =>
+      trpcQuery<RosterEntry[]>('bookings.studioRoster', { classSessionId }),
+    checkIn: (bookingId: string) =>
+      trpcMutation<{ id: string; status: string }>('bookings.checkIn', { bookingId }),
+    markNoShow: (bookingId: string) =>
+      trpcMutation<{ id: string; status: string }>('bookings.markNoShow', { bookingId }),
+    studioWalkin: (input: {
+      classSessionId: string;
+      fullName: string;
+      phone: string;
+      cashCollected?: boolean;
+    }) => trpcMutation<{ kind: string; bookingId: string }>('bookings.studioWalkin', input),
+  },
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Staff-side. Every procedure here requires a STUDIO_OWNER / MANAGER /
+  // INSTRUCTOR JWT. Sign in with a staff phone (the seed plants
+  // +96170100001 / +96170100002 / +96170100003) to exercise these. The
+  // OTP magic code in LOCAL_DEV mode is 123456.
+  // ────────────────────────────────────────────────────────────────────────
+  staff: {
+    classes: {
+      // Backend's `classes.studioList` takes a `from`/`to` ISO window plus
+      // an `includeCancelled` flag. The week-strip in EditSchedule passes
+      // a 7-day window centered on today.
+      studioList: (input: { from: string; to: string; includeCancelled?: boolean }) =>
+        trpcQuery<StudioSessionRow[]>('classes.studioList', {
+          includeCancelled: true,
+          ...input,
+        }),
+      studioCreate: (input: {
+        classTemplateId?: string;
+        instructorId?: string;
+        startsAt: string;
+        endsAt: string;
+        capacity: number;
+        waitlistCap?: number;
+        price: MoneyWire;
+      }) => trpcMutation<StudioSessionRow>('classes.studioCreate', input),
+      studioUpdate: (input: {
+        id: string;
+        instructorId?: string | null;
+        startsAt?: string;
+        endsAt?: string;
+        capacity?: number;
+        waitlistCap?: number;
+        price?: MoneyWire;
+      }) => trpcMutation<StudioSessionRow>('classes.studioUpdate', input),
+      studioCancel: (input: { id: string; reason: string }) =>
+        trpcMutation<{ id: string; status: ClassSessionStatus }>('classes.studioCancel', input),
+    },
+    classTemplates: {
+      list: () => trpcQuery<ClassTemplateSummary[]>('class-templates.list'),
+    },
+    reports: {
+      summary: (range: 'TODAY' | 'WEEK' | 'MONTH') =>
+        trpcQuery<ReportsSummary>('reports.summary', { range }),
+    },
   },
 };
 
