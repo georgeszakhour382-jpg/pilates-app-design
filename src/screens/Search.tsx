@@ -20,14 +20,24 @@ const RECENT_SEARCHES = ['Achrafieh reformer', 'Mar Mikhael', 'Pilates Beirut'];
 export function Search({
   goto,
   setActiveStudioSlug,
+  openFiltersOnMount = false,
+  clearFiltersOpenOnMount,
 }: {
   goto: (id: ScreenId) => void;
   setActiveStudioSlug?: (slug: string | null) => void;
+  openFiltersOnMount?: boolean;
+  clearFiltersOpenOnMount?: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(openFiltersOnMount);
+
+  // Consume the cross-screen "open filters" handoff so a subsequent visit
+  // to Search (without re-clicking the filter icon) starts in list mode.
+  useEffect(() => {
+    if (openFiltersOnMount) clearFiltersOpenOnMount?.();
+  }, [openFiltersOnMount, clearFiltersOpenOnMount]);
   const [selTypes, setSelTypes] = useState<Set<ClassType>>(new Set());
   const [distance, setDistance] = useState(30);
   const [price, setPrice] = useState<[number, number]>([15, 50]);
@@ -97,6 +107,15 @@ export function Search({
     (time.size > 0 ? 1 : 0) +
     (genderPref !== 'any' ? 1 : 0) +
     (price[0] !== 15 || price[1] !== 50 ? 1 : 0);
+
+  const resetAllFilters = (): void => {
+    setSelTypes(new Set());
+    setDistance(30);
+    setPrice([15, 50]);
+    setLevel('All levels');
+    setTime(new Set());
+    setGenderPref('any');
+  };
 
   return (
     <div className="fade-in relative h-full bg-bone">
@@ -284,14 +303,7 @@ export function Search({
             <Button
               variant="tertiary"
               size="md"
-              onClick={() => {
-                setSelTypes(new Set());
-                setDistance(30);
-                setPrice([15, 50]);
-                setLevel('All levels');
-                setTime(new Set());
-                setGenderPref('any');
-              }}
+              onClick={resetAllFilters}
             >
               Reset
             </Button>
@@ -301,6 +313,24 @@ export function Search({
           </div>
         }
       >
+        {/* Always-visible Reset row at the top of the sheet so users don't
+            have to scroll all the way down to find it. Becomes active only
+            when at least one filter has been applied. */}
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[12px] text-ink-60">
+            {activeFilterCount === 0
+              ? 'No filters applied'
+              : `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} active`}
+          </span>
+          <button
+            type="button"
+            onClick={resetAllFilters}
+            disabled={activeFilterCount === 0}
+            className="press-soft text-[13px] font-medium text-clay underline underline-offset-4 disabled:cursor-not-allowed disabled:text-ink-60 disabled:no-underline"
+          >
+            Reset all
+          </button>
+        </div>
         <FilterGroup label="Distance">
           <input
             type="range"

@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, Heart, Share2, Star, MapPin, Clock } from 'lucide-react';
+import { CalendarDays, ChevronLeft, Heart, Share2, Star, MapPin, Clock } from 'lucide-react';
 import { Chip } from '../components/ui/Chip';
 import { Button } from '../components/ui/Button';
+import { Sheet } from '../components/ui/Sheet';
 import { StickyCTA } from '../components/ui/StickyCTA';
 import { ClassRow } from '../components/shared/ClassRow';
 import { InstructorBadge } from '../components/shared/InstructorBadge';
+import { MonthCalendar } from '../components/shared/MonthCalendar';
 import { reviews as mockReviews } from '../data/mock';
 import type { ScreenId } from '../App';
 import { StudioMap } from '../components/shared/StudioMap';
@@ -41,15 +43,21 @@ export function StudioDetail({
     enabled: !!slug,
   });
 
-  // Day picker — next 7 days, Beirut-local. The query fetches the whole
-  // 7-day window from the backend; the picker is purely a client filter.
-  const days = useMemo(() => nextDayLabels(7), []);
+  // Day picker — 28 days in the horizontal strip; the calendar Sheet lets
+  // the user jump up to 60 days out. Backend fetch covers the wider window
+  // so the calendar's "available" dots reflect real data.
+  const days = useMemo(() => nextDayLabels(28), []);
   const [activeDayIso, setActiveDayIso] = useState(days[1]?.iso ?? days[0]?.iso ?? '');
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const fromIso = days[0]?.iso ? `${days[0].iso}T00:00:00.000Z` : new Date().toISOString();
-  const toIso = days[days.length - 1]?.iso
-    ? `${days[days.length - 1]!.iso}T23:59:59.999Z`
-    : new Date().toISOString();
+  // Look 60 days ahead so the calendar Sheet's farther-out dots are accurate.
+  const toIso = useMemo(() => {
+    const start = days[0]?.iso ?? new Date().toISOString().slice(0, 10);
+    const d = new Date(`${start}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 60);
+    return d.toISOString();
+  }, [days]);
 
   const sessionsQuery = useQuery({
     queryKey: ['classes.list', studioQuery.data?.id, fromIso, toIso],
@@ -93,6 +101,16 @@ export function StudioDetail({
       .filter((s) => s.startsAt.slice(0, 10) === activeDayIso)
       .sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1));
   }, [sessionsQuery.data, activeDayIso]);
+
+  // Set of yyyy-mm-dd days that have at least one SCHEDULED session — drives
+  // the dots on the month-grid calendar.
+  const availableDays = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of sessionsQuery.data ?? []) {
+      if (s.status === 'SCHEDULED') set.add(s.startsAt.slice(0, 10));
+    }
+    return set;
+  }, [sessionsQuery.data]);
 
   if (studioQuery.isLoading) {
     return (
@@ -208,9 +226,19 @@ export function StudioDetail({
 
         {/* Schedule with sticky day picker */}
         <section className="mt-9">
-          <div className="px-5">
-            <div className="label-eyebrow">{t('studio.schedule')}</div>
-            <h2 className="font-display mt-1 text-[22px]">{t('studio.pick_a_day')}</h2>
+          <div className="flex items-end justify-between px-5">
+            <div>
+              <div className="label-eyebrow">{t('studio.schedule')}</div>
+              <h2 className="font-display mt-1 text-[22px]">{t('studio.pick_a_day')}</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCalendarOpen(true)}
+              className="press-soft inline-flex items-center gap-1.5 rounded-full bg-sand px-3 py-1.5 text-[12px] font-medium text-ink"
+            >
+              <CalendarDays size={14} />
+              Calendar
+            </button>
           </div>
           <div className="sticky top-0 z-10 mt-3 -mx-0 bg-bone/95 backdrop-blur-sm">
             <div className="flex gap-2 overflow-x-auto px-5 py-2 scrollbar-none">
@@ -373,6 +401,23 @@ export function StudioDetail({
           {t('studio.book_a_class')}
         </Button>
       </StickyCTA>
+
+      {/* Month-grid calendar — opens from the schedule header. Picking a day
+          closes the sheet and jumps the horizontal strip to that date. */}
+      <Sheet
+        open={calendarOpen}
+        title={t('studio.pick_a_day')}
+        onClose={() => setCalendarOpen(false)}
+      >
+        <MonthCalendar
+          availableDays={availableDays}
+          selectedIso={activeDayIso}
+          onSelect={(iso) => {
+            setActiveDayIso(iso);
+            setCalendarOpen(false);
+          }}
+        />
+      </Sheet>
     </div>
   );
 }

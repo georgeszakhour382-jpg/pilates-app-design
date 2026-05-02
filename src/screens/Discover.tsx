@@ -16,9 +16,11 @@ const categories: ClassType[] = ['Reformer', 'Mat', 'Pre/postnatal', 'Contempora
 export function Discover({
   goto,
   setActiveStudioSlug,
+  setSearchFiltersOpenOnMount,
 }: {
   goto: (id: ScreenId) => void;
   setActiveStudioSlug?: (slug: string) => void;
+  setSearchFiltersOpenOnMount?: (open: boolean) => void;
 }) {
   const [cat, setCat] = useState<ClassType | 'All'>('All');
 
@@ -72,18 +74,33 @@ export function Discover({
           </h1>
         </header>
 
-        {/* Search */}
+        {/* Search — text region opens Search; the filter pill opens the filter
+            sheet directly on the Search screen via shared App-level state. */}
         <div className="mt-5 px-5">
-          <button
-            onClick={() => goto('search')}
-            className="press-soft flex h-12 w-full items-center gap-3 rounded-full bg-sand px-4 text-start"
-          >
-            <Search size={18} className="text-ink-60" />
-            <span className="text-[14px] text-ink-60">{t('discover.search_placeholder')}</span>
-            <span className="ml-auto rounded-full bg-bone p-1.5 text-ink">
+          <div className="press-soft flex h-12 w-full items-center gap-3 rounded-full bg-sand px-4">
+            <button
+              onClick={() => {
+                setSearchFiltersOpenOnMount?.(false);
+                goto('search');
+              }}
+              className="flex flex-1 items-center gap-3 text-start"
+            >
+              <Search size={18} className="text-ink-60" />
+              <span className="text-[14px] text-ink-60">{t('discover.search_placeholder')}</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Open filters"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSearchFiltersOpenOnMount?.(true);
+                goto('search');
+              }}
+              className="ml-auto rounded-full bg-bone p-1.5 text-ink"
+            >
               <SlidersHorizontal size={14} />
-            </span>
-          </button>
+            </button>
+          </div>
         </div>
 
         {/* Categories */}
@@ -108,7 +125,16 @@ export function Discover({
               <div className="label-eyebrow">{t('discover.near_you')}</div>
               <h2 className="font-display mt-1 text-[22px]">{t('discover.near_you_sub')}</h2>
             </div>
-            <button className="text-[12px] font-medium text-ink-60">{t('discover.see_all')}</button>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchFiltersOpenOnMount?.(false);
+                goto('search');
+              }}
+              className="press-soft text-[12px] font-medium text-ink-60"
+            >
+              {t('discover.see_all')}
+            </button>
           </div>
           <div className="mt-4 -mx-5 flex gap-3 overflow-x-auto px-5 pb-2 scrollbar-none">
             {studiosQuery.isLoading && (

@@ -49,6 +49,9 @@ export default function App() {
   // should the next screen render against."
   const [activeStudioSlug, setActiveStudioSlug] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // Cross-screen handoff for "open the filter sheet immediately on next
+  // Search mount". Used by Discover's filter icon → Search screen.
+  const [searchFiltersOpenOnMount, setSearchFiltersOpenOnMount] = useState(false);
 
   const tone = screens.find((s) => s.id === active)?.tone ?? 'dark';
 
@@ -104,6 +107,8 @@ export default function App() {
             activeSessionId={activeSessionId}
             setActiveStudioSlug={setActiveStudioSlug}
             setActiveSessionId={setActiveSessionId}
+            searchFiltersOpenOnMount={searchFiltersOpenOnMount}
+            setSearchFiltersOpenOnMount={setSearchFiltersOpenOnMount}
           />
         </PhoneFrame>
       </main>
@@ -125,16 +130,32 @@ interface ScreenProps {
   activeSessionId: string | null;
   setActiveStudioSlug: (slug: string | null) => void;
   setActiveSessionId: (id: string | null) => void;
+  searchFiltersOpenOnMount: boolean;
+  setSearchFiltersOpenOnMount: (open: boolean) => void;
 }
 
 function ScreenView(props: ScreenProps) {
-  const { id, goto, activeStudioSlug, activeSessionId, setActiveStudioSlug, setActiveSessionId } =
-    props;
+  const {
+    id,
+    goto,
+    activeStudioSlug,
+    activeSessionId,
+    setActiveStudioSlug,
+    setActiveSessionId,
+    searchFiltersOpenOnMount,
+    setSearchFiltersOpenOnMount,
+  } = props;
   switch (id) {
     case 'onboarding':
       return <Onboarding goto={goto} />;
     case 'discover':
-      return <Discover goto={goto} setActiveStudioSlug={setActiveStudioSlug} />;
+      return (
+        <Discover
+          goto={goto}
+          setActiveStudioSlug={setActiveStudioSlug}
+          setSearchFiltersOpenOnMount={setSearchFiltersOpenOnMount}
+        />
+      );
     case 'studio':
       return (
         <StudioDetail
@@ -150,7 +171,14 @@ function ScreenView(props: ScreenProps) {
     case 'bookings':
       return <MyBookings goto={goto} />;
     case 'search':
-      return <Search goto={goto} setActiveStudioSlug={setActiveStudioSlug} />;
+      return (
+        <Search
+          goto={goto}
+          setActiveStudioSlug={setActiveStudioSlug}
+          openFiltersOnMount={searchFiltersOpenOnMount}
+          clearFiltersOpenOnMount={() => setSearchFiltersOpenOnMount(false)}
+        />
+      );
     case 'profile':
       return <Profile goto={goto} />;
     case 'instructor-dashboard':
