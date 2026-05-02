@@ -7,6 +7,7 @@ import { InstructorProfile } from './screens/InstructorProfile';
 import { Booking } from './screens/Booking';
 import { MyBookings } from './screens/MyBookings';
 import { Search } from './screens/Search';
+import { Social } from './screens/Social';
 import { Profile } from './screens/Profile';
 import { InstructorDashboard } from './screens/InstructorDashboard';
 import { Roster } from './screens/Roster';
@@ -21,6 +22,7 @@ export type ScreenId =
   | 'booking'
   | 'bookings'
   | 'search'
+  | 'social'
   | 'profile'
   | 'instructor-dashboard'
   | 'edit-schedule'
@@ -35,6 +37,7 @@ const screens: { id: ScreenId; label: string; tone?: 'dark' | 'light'; group?: '
   { id: 'booking', label: 'Booking' },
   { id: 'bookings', label: 'My bookings' },
   { id: 'search', label: 'Search' },
+  { id: 'social', label: 'Social' },
   { id: 'profile', label: 'Profile' },
   { id: 'instructor-dashboard', label: 'Teach', group: 'teach' },
   { id: 'edit-schedule', label: 'Schedule', group: 'teach' },
@@ -179,6 +182,8 @@ function ScreenView(props: ScreenProps) {
           clearFiltersOpenOnMount={() => setSearchFiltersOpenOnMount(false)}
         />
       );
+    case 'social':
+      return <Social goto={goto} setActiveStudioSlug={setActiveStudioSlug} />;
     case 'profile':
       return <Profile goto={goto} />;
     case 'instructor-dashboard':
