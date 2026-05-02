@@ -164,6 +164,31 @@ export interface CreateBookingResult {
   position?: number;
 }
 
+export interface PostAuthorWire {
+  id: string;
+  fullName: string;
+  city: string | null;
+}
+
+export interface PostWire {
+  id: string;
+  caption: string;
+  mediaUrl: string;
+  mediaKind: string;
+  createdAt: string;
+  author: PostAuthorWire;
+  likeCount: number;
+  commentCount: number;
+  liked: boolean;
+}
+
+export interface PostCommentWire {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: PostAuthorWire;
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Procedures grouped by router for ergonomic call sites.
 // ──────────────────────────────────────────────────────────────────────────
@@ -205,6 +230,20 @@ export const api = {
       }),
     cancel: (bookingId: string) =>
       trpcMutation<BookingSummary>('bookings.cancel', { bookingId }),
+  },
+  posts: {
+    feed: (input: { cursor?: string; limit?: number } = {}) =>
+      trpcQuery<{ items: PostWire[]; nextCursor: string | null }>('posts.feed', input),
+    create: (input: { caption: string; mediaUrl: string; mediaKind?: 'image' | 'video' }) =>
+      trpcMutation<PostWire>('posts.create', input),
+    toggleLike: (postId: string) =>
+      trpcMutation<{ postId: string; liked: boolean; likeCount: number }>('posts.toggleLike', {
+        postId,
+      }),
+    comments: (input: { postId: string; cursor?: string; limit?: number }) =>
+      trpcQuery<{ items: PostCommentWire[]; nextCursor: string | null }>('posts.comments', input),
+    comment: (input: { postId: string; body: string }) =>
+      trpcMutation<PostCommentWire>('posts.comment', input),
   },
 };
 

@@ -23,61 +23,109 @@ import { Sheet } from '../components/ui/Sheet';
 import { useToast } from '../components/ui/Toast';
 import { useT } from '../lib/i18n';
 type TFunc = ReturnType<typeof useT>;
-import { authStore } from '../lib/auth';
-import {
-  posts as seedPosts,
-  type Post,
-  type PostAuthor,
-  type PostComment,
-} from '../data/mock';
+import { api, type PostWire, type PostCommentWire } from '../lib/api';
 
-const STORAGE_KEY = 'pilates:social:state';
+// Saves are persisted client-side until the backend models them — feed/likes/
+// comments/posts go through the marketplace API.
+const SAVES_KEY = 'pilates:social:saves';
 
-interface PersistedState {
-  // Per-post overlays (likes/saves/extra comments) stored by id so we don't
-  // re-shape the seed array.
-  overrides: Record<
-    string,
-    { liked?: boolean; saved?: boolean; deltaLikes?: number; addedComments?: PostComment[] }
-  >;
-  // User-created posts, prepended to the feed on mount.
-  userPosts: Post[];
+interface UiAuthor {
+  id: string;
+  name: string;
+  handle: string;
+  avatar: string;
+  role: 'student' | 'instructor' | 'studio';
+  studioName?: string;
+  city: string | null;
 }
 
-function readState(): PersistedState {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { overrides: {}, userPosts: [] };
-    return JSON.parse(raw) as PersistedState;
-  } catch {
-    return { overrides: {}, userPosts: [] };
-  }
+interface UiComment {
+  id: string;
+  author: UiAuthor;
+  body: string;
+  createdAt: string;
 }
 
-function writeState(s: PersistedState): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+interface UiPost {
+  id: string;
+  author: UiAuthor;
+  media: { kind: 'image' | 'video'; url: string };
+  caption: string;
+  createdAt: string;
+  likes: number;
+  liked: boolean;
+  saved: boolean;
+  commentCount: number;
 }
 
-function meAsAuthor(): PostAuthor {
-  const u = authStore.user();
-  if (u) {
-    return {
-      id: `me-${u.id}`,
-      name: u.fullName || u.phone,
-      handle: 'you',
-      avatar:
-        'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=160&h=160&q=80',
-      role: 'student',
-    };
-  }
+const DEFAULT_AVATAR =
+  'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=160&h=160&q=80';
+
+function relTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const diff = Math.max(0, Date.now() - t);
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  const w = Math.floor(d / 7);
+  if (w < 5) return `${w}w`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function adaptAuthor(a: PostWire['author']): UiAuthor {
+  const handle = (a.fullName.split(' ')[0] ?? a.fullName)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
   return {
-    id: 'me-guest',
-    name: 'You',
-    handle: 'guest',
-    avatar:
-      'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=160&h=160&q=80',
+    id: a.id,
+    name: a.fullName,
+    handle: handle || 'member',
+    avatar: DEFAULT_AVATAR,
     role: 'student',
+    city: a.city,
   };
+}
+
+function adaptPost(p: PostWire, savedSet: Set<string>): UiPost {
+  return {
+    id: p.id,
+    author: adaptAuthor(p.author),
+    media: { kind: p.mediaKind === 'video' ? 'video' : 'image', url: p.mediaUrl },
+    caption: p.caption,
+    createdAt: relTime(p.createdAt),
+    likes: p.likeCount,
+    liked: p.liked,
+    saved: savedSet.has(p.id),
+    commentCount: p.commentCount,
+  };
+}
+
+function adaptComment(c: PostCommentWire): UiComment {
+  return {
+    id: c.id,
+    author: adaptAuthor(c.author),
+    body: c.body,
+    createdAt: relTime(c.createdAt),
+  };
+}
+
+function readSaves(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(SAVES_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeSaves(s: Set<string>): void {
+  window.localStorage.setItem(SAVES_KEY, JSON.stringify(Array.from(s)));
 }
 
 export function Social({
@@ -90,27 +138,27 @@ export function Social({
   const t = useT();
   const toast = useToast();
 
-  const [state, setState] = useState<PersistedState>(() => readState());
-  useEffect(() => writeState(state), [state]);
+  const [posts, setPosts] = useState<UiPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const savesRef = useRef<Set<string>>(readSaves());
 
-  // Compose the live feed: user posts on top, then seeds, with overrides applied.
-  const feed = useMemo<Post[]>(() => {
-    const apply = (p: Post): Post => {
-      const o = state.overrides[p.id];
-      if (!o) return p;
-      return {
-        ...p,
-        liked: o.liked ?? p.liked,
-        saved: o.saved ?? p.saved,
-        likes: p.likes + (o.deltaLikes ?? 0),
-        comments: [...p.comments, ...(o.addedComments ?? [])],
-      };
-    };
-    return [...state.userPosts.map(apply), ...seedPosts.map(apply)];
-  }, [state]);
+  const refresh = useCallback(async () => {
+    try {
+      setError(null);
+      const res = await api.posts.feed();
+      setPosts(res.items.map((p) => adaptPost(p, savesRef.current)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load feed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // Snap-scroll container — track the in-view post so the action sidebar +
-  // header chrome reflect the right post even mid-scroll.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   useEffect(() => {
@@ -118,7 +166,6 @@ export function Social({
     if (!el) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        // Pick the entry with the largest intersection ratio.
         let bestIdx = activeIndex;
         let bestRatio = 0;
         for (const e of entries) {
@@ -134,114 +181,103 @@ export function Social({
     );
     Array.from(el.querySelectorAll('[data-post]')).forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [feed.length, activeIndex]);
+  }, [posts.length, activeIndex]);
 
-  // Tab toggle — community vs following. Following is mock-filtered (instructor
-  // + studio posts only) for the prototype.
   const [tab, setTab] = useState<'community' | 'following'>('community');
-  const visible = useMemo<Post[]>(() => {
-    if (tab === 'community') return feed;
-    return feed.filter((p) => p.author.role !== 'student');
-  }, [feed, tab]);
+  const visible = useMemo<UiPost[]>(() => {
+    if (tab === 'community') return posts;
+    return posts.filter((p) => p.author.role !== 'student');
+  }, [posts, tab]);
 
-  const [openComments, setOpenComments] = useState<Post | null>(null);
+  const [openComments, setOpenComments] = useState<UiPost | null>(null);
   const [openCreate, setOpenCreate] = useState(false);
-  const [openMenu, setOpenMenu] = useState<Post | null>(null);
+  const [openMenu, setOpenMenu] = useState<UiPost | null>(null);
 
   const toggleLike = useCallback(
-    (p: Post) => {
-      setState((cur) => {
-        const o = cur.overrides[p.id] ?? {};
-        const wasLiked = o.liked ?? p.liked;
-        const next: PersistedState['overrides'][string] = {
-          ...o,
-          liked: !wasLiked,
-          deltaLikes: (o.deltaLikes ?? 0) + (wasLiked ? -1 : 1),
-        };
-        return { ...cur, overrides: { ...cur.overrides, [p.id]: next } };
-      });
+    async (p: UiPost) => {
+      // Optimistic
+      setPosts((cur) =>
+        cur.map((q) =>
+          q.id === p.id
+            ? { ...q, liked: !q.liked, likes: q.likes + (q.liked ? -1 : 1) }
+            : q,
+        ),
+      );
       toast.show(p.liked ? t('social.unliked_toast') : t('social.liked_toast'));
+      try {
+        const res = await api.posts.toggleLike(p.id);
+        setPosts((cur) =>
+          cur.map((q) =>
+            q.id === p.id ? { ...q, liked: res.liked, likes: res.likeCount } : q,
+          ),
+        );
+      } catch {
+        // Revert
+        setPosts((cur) =>
+          cur.map((q) =>
+            q.id === p.id
+              ? { ...q, liked: p.liked, likes: p.likes }
+              : q,
+          ),
+        );
+        toast.show('Could not save like', 'warn');
+      }
     },
     [toast, t],
   );
 
   const toggleSave = useCallback(
-    (p: Post) => {
-      setState((cur) => {
-        const o = cur.overrides[p.id] ?? {};
-        const wasSaved = o.saved ?? p.saved;
-        return {
-          ...cur,
-          overrides: { ...cur.overrides, [p.id]: { ...o, saved: !wasSaved } },
-        };
-      });
+    (p: UiPost) => {
+      const next = !p.saved;
+      const s = savesRef.current;
+      if (next) s.add(p.id);
+      else s.delete(p.id);
+      writeSaves(s);
+      setPosts((cur) => cur.map((q) => (q.id === p.id ? { ...q, saved: next } : q)));
       toast.show(p.saved ? t('social.unsaved_toast') : t('social.saved_toast'));
     },
     [toast, t],
   );
 
   const sharePost = useCallback(
-    async (p: Post) => {
+    async (p: UiPost) => {
       const url = `${window.location.origin}/p/${p.id}`;
       try {
         await navigator.clipboard.writeText(url);
-        toast.show(t('social.shared_toast'));
       } catch {
-        toast.show(t('social.shared_toast'));
+        // ignore
       }
+      toast.show(t('social.shared_toast'));
     },
     [toast, t],
   );
 
-  const addComment = useCallback(
-    (p: Post, body: string) => {
-      const trimmed = body.trim();
-      if (!trimmed) return;
-      const c: PostComment = {
-        id: `uc-${Date.now()}`,
-        author: meAsAuthor(),
-        body: trimmed,
-        createdAt: 'just now',
-      };
-      setState((cur) => {
-        const o = cur.overrides[p.id] ?? {};
-        return {
-          ...cur,
-          overrides: {
-            ...cur.overrides,
-            [p.id]: { ...o, addedComments: [...(o.addedComments ?? []), c] },
-          },
-        };
-      });
-    },
-    [],
-  );
-
   const publishPost = useCallback(
-    (caption: string, imageUrl: string) => {
+    async (caption: string, imageUrl: string) => {
       const trimmed = caption.trim();
       if (!trimmed) return;
-      const newPost: Post = {
-        id: `up-${Date.now()}`,
-        author: meAsAuthor(),
-        media: { kind: 'image', url: imageUrl },
-        caption: trimmed,
-        createdAt: 'just now',
-        likes: 0,
-        liked: false,
-        saved: false,
-        comments: [],
-      };
-      setState((cur) => ({ ...cur, userPosts: [newPost, ...cur.userPosts] }));
-      setOpenCreate(false);
-      toast.show(t('social.published_toast'));
+      try {
+        const created = await api.posts.create({
+          caption: trimmed,
+          mediaUrl: imageUrl,
+          mediaKind: 'image',
+        });
+        setPosts((cur) => [adaptPost(created, savesRef.current), ...cur]);
+        setOpenCreate(false);
+        toast.show(t('social.published_toast'));
+      } catch (e) {
+        toast.show(
+          e instanceof Error && e.message ? e.message : 'Could not publish',
+          'warn',
+        );
+      }
     },
     [toast, t],
   );
 
   return (
     <div className="fade-in relative h-full bg-ink">
-      {/* Header chrome — translucent, sits over the media */}
+      {/* Header chrome */}
       <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 pt-12">
         <div className="flex items-center gap-1">
           {(['community', 'following'] as const).map((id) => {
@@ -270,13 +306,25 @@ export function Social({
         </button>
       </div>
 
-      {/* Scroll-snap feed */}
       <div
         ref={containerRef}
         className="absolute inset-0 snap-y snap-mandatory overflow-y-scroll scrollbar-none"
         style={{ scrollSnapType: 'y mandatory' }}
       >
-        {visible.length === 0 ? (
+        {loading ? (
+          <div className="grid h-full place-items-center text-bone/70 text-[13px]">
+            Loading…
+          </div>
+        ) : error ? (
+          <div className="grid h-full place-items-center px-8 text-center text-bone">
+            <div>
+              <p className="text-[14px] text-bone/80">{error}</p>
+              <Button className="mt-4" onClick={() => void refresh()}>
+                Retry
+              </Button>
+            </div>
+          </div>
+        ) : visible.length === 0 ? (
           <div className="grid h-full place-items-center px-8 text-center text-bone">
             <div>
               <p className="font-display text-[24px] leading-tight">{t('social.empty')}</p>
@@ -292,14 +340,13 @@ export function Social({
               post={p}
               idx={idx}
               isActive={idx === activeIndex}
-              onToggleLike={() => toggleLike(p)}
+              onToggleLike={() => void toggleLike(p)}
               onToggleSave={() => toggleSave(p)}
-              onShare={() => sharePost(p)}
+              onShare={() => void sharePost(p)}
               onOpenComments={() => setOpenComments(p)}
               onOpenMenu={() => setOpenMenu(p)}
               onAuthorTap={() => {
                 if (p.author.role === 'studio' && p.author.studioName) {
-                  // best-effort — slugify and let the next screen 404 gracefully
                   setActiveStudioSlug?.(
                     p.author.studioName.toLowerCase().replace(/[^a-z]+/g, '-'),
                   );
@@ -314,7 +361,6 @@ export function Social({
 
       <BottomNav active="social" onSelect={goto} />
 
-      {/* Comments sheet */}
       <Sheet
         open={!!openComments}
         title={t('social.comments_title')}
@@ -322,35 +368,41 @@ export function Social({
       >
         {openComments && (
           <CommentsContent
-            post={openComments}
-            onAdd={(body) => addComment(openComments, body)}
+            postId={openComments.id}
+            onCommentAdded={() => {
+              setPosts((cur) =>
+                cur.map((q) =>
+                  q.id === openComments.id
+                    ? { ...q, commentCount: q.commentCount + 1 }
+                    : q,
+                ),
+              );
+            }}
             t={t}
           />
         )}
       </Sheet>
 
-      {/* Create post sheet */}
       <Sheet
         open={openCreate}
         title={t('social.add_post_title')}
         onClose={() => setOpenCreate(false)}
       >
-        <CreatePostContent onPublish={publishPost} onCancel={() => setOpenCreate(false)} t={t} />
+        <CreatePostContent
+          onPublish={(c, u) => void publishPost(c, u)}
+          onCancel={() => setOpenCreate(false)}
+          t={t}
+        />
       </Sheet>
 
-      {/* Three-dot menu */}
-      <Sheet
-        open={!!openMenu}
-        title=" "
-        onClose={() => setOpenMenu(null)}
-      >
+      <Sheet open={!!openMenu} title=" " onClose={() => setOpenMenu(null)}>
         {openMenu && (
           <ul className="space-y-2">
             <MenuRow
               icon={<Share2 size={16} />}
               label={t('social.menu_share')}
               onClick={() => {
-                sharePost(openMenu);
+                void sharePost(openMenu);
                 setOpenMenu(null);
               }}
             />
@@ -401,7 +453,7 @@ function PostCard({
   onAuthorTap,
   t,
 }: {
-  post: Post;
+  post: UiPost;
   idx: number;
   isActive: boolean;
   onToggleLike: () => void;
@@ -412,13 +464,11 @@ function PostCard({
   onAuthorTap: () => void;
   t: TFunc;
 }) {
-  // Double-tap-to-like with a heart-burst overlay
   const [burst, setBurst] = useState<{ x: number; y: number; key: number } | null>(null);
   const lastTap = useRef<number>(0);
   const onMediaTap = (e: React.MouseEvent | React.TouchEvent) => {
     const now = Date.now();
     if (now - lastTap.current < 320) {
-      // Position the burst at the tap location, relative to the card
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const point =
         'changedTouches' in e
@@ -440,8 +490,6 @@ function PostCard({
       className="relative h-full w-full snap-start"
       style={{ minHeight: '100%' }}
     >
-      {/* Image — full bleed, decorative only (no click handling here so
-          BottomNav clicks at the bottom of the screen aren't intercepted). */}
       <img
         src={post.media.url}
         alt=""
@@ -451,12 +499,9 @@ function PostCard({
         ].join(' ')}
         draggable={false}
       />
-      {/* Top + bottom gradients for legibility — purely visual */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-32"
-        style={{
-          background: 'linear-gradient(to bottom, rgba(31,27,22,0.45), transparent)',
-        }}
+        style={{ background: 'linear-gradient(to bottom, rgba(31,27,22,0.45), transparent)' }}
       />
       <div
         className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3"
@@ -466,16 +511,12 @@ function PostCard({
         }}
       />
 
-      {/* Tap-target overlay — captures double-tap-to-like.
-          Stops 88px above the bottom so it doesn't sit under (and steal
-          clicks from) the BottomNav. */}
       <button
         onClick={onMediaTap as unknown as React.MouseEventHandler<HTMLButtonElement>}
         className="absolute inset-x-0 top-0 block cursor-default bg-transparent"
         style={{ bottom: 88 }}
         aria-label={`Post by ${post.author.name}`}
       >
-        {/* Heart burst */}
         {burst && (
           <span
             key={burst.key}
@@ -493,10 +534,6 @@ function PostCard({
         )}
       </button>
 
-      {/* Author row + caption (bottom-left).
-          Container is pointer-events-none so its empty regions don't steal
-          clicks meant for the BottomNav 88px below; the author button + the
-          caption text re-enable pointer events on themselves. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end gap-3 p-5 pb-[110px]">
         <div className="min-w-0 flex-1">
           <button
@@ -531,9 +568,6 @@ function PostCard({
         </div>
       </div>
 
-      {/* Action sidebar — bottom-right column.
-          Container itself is pointer-events-none so the empty gaps between
-          buttons don't intercept clicks; each ActionButton re-enables. */}
       <div className="pointer-events-none absolute bottom-[110px] right-3 z-10 flex flex-col items-center gap-5 text-bone">
         <ActionButton
           onClick={(e) => {
@@ -556,7 +590,7 @@ function PostCard({
             onOpenComments();
           }}
           icon={<MessageCircle size={26} strokeWidth={1.6} />}
-          count={post.comments.length}
+          count={post.commentCount}
         />
         <ActionButton
           onClick={(e) => {
@@ -620,8 +654,8 @@ function ActionButton({
   );
 }
 
-function RoleChip({ role, t }: { role: PostAuthor['role']; t: TFunc }) {
-  const palette: Record<PostAuthor['role'], string> = {
+function RoleChip({ role, t }: { role: UiAuthor['role']; t: TFunc }) {
+  const palette: Record<UiAuthor['role'], string> = {
     student: 'bg-bone/85 text-ink',
     instructor: 'bg-clay text-bone',
     studio: 'bg-sage text-bone',
@@ -645,26 +679,63 @@ function RoleChip({ role, t }: { role: PostAuthor['role']; t: TFunc }) {
 }
 
 // =============================================================================
-// Comments sheet content
+// Comments sheet content — fetches comments live from the backend
 // =============================================================================
 
 function CommentsContent({
-  post,
-  onAdd,
+  postId,
+  onCommentAdded,
   t,
 }: {
-  post: Post;
-  onAdd: (body: string) => void;
+  postId: string;
+  onCommentAdded: () => void;
   t: TFunc;
 }) {
+  const [comments, setComments] = useState<UiComment[] | null>(null);
   const [body, setBody] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.posts
+      .comments({ postId })
+      .then((res) => {
+        if (!cancelled) setComments(res.items.map(adaptComment));
+      })
+      .catch(() => {
+        if (!cancelled) setComments([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [postId]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = body.trim();
+    if (!trimmed || submitting) return;
+    setSubmitting(true);
+    try {
+      const created = await api.posts.comment({ postId, body: trimmed });
+      setComments((cur) => [...(cur ?? []), adaptComment(created)]);
+      setBody('');
+      onCommentAdded();
+    } catch {
+      // toast handled at parent if needed
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div>
-      {post.comments.length === 0 ? (
+      {comments === null ? (
+        <p className="py-6 text-center text-[13px] text-ink-60">Loading…</p>
+      ) : comments.length === 0 ? (
         <p className="py-6 text-center text-[13px] text-ink-60">{t('social.no_comments')}</p>
       ) : (
         <ul className="space-y-4">
-          {post.comments.map((c) => (
+          {comments.map((c) => (
             <li key={c.id} className="flex items-start gap-3">
               <img
                 src={c.author.avatar}
@@ -683,13 +754,8 @@ function CommentsContent({
         </ul>
       )}
 
-      {/* Inline composer */}
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          onAdd(body);
-          setBody('');
-        }}
+        onSubmit={submit}
         className="mt-6 flex items-center gap-2 rounded-full bg-sand px-3 py-2"
       >
         <input
@@ -700,7 +766,7 @@ function CommentsContent({
         />
         <button
           type="submit"
-          disabled={body.trim().length === 0}
+          disabled={body.trim().length === 0 || submitting}
           className="press-soft grid h-9 w-9 place-items-center rounded-full bg-ink text-bone disabled:opacity-40"
           aria-label={t('social.send')}
         >
