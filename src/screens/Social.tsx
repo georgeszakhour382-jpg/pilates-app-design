@@ -440,36 +440,41 @@ function PostCard({
       className="relative h-full w-full snap-start"
       style={{ minHeight: '100%' }}
     >
-      {/* Media */}
+      {/* Image — full bleed, decorative only (no click handling here so
+          BottomNav clicks at the bottom of the screen aren't intercepted). */}
+      <img
+        src={post.media.url}
+        alt=""
+        className={[
+          'pointer-events-none absolute inset-0 h-full w-full object-cover transition-transform duration-700',
+          isActive ? 'scale-100' : 'scale-[1.02]',
+        ].join(' ')}
+        draggable={false}
+      />
+      {/* Top + bottom gradients for legibility — purely visual */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-32"
+        style={{
+          background: 'linear-gradient(to bottom, rgba(31,27,22,0.45), transparent)',
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3"
+        style={{
+          background:
+            'linear-gradient(to top, rgba(31,27,22,0.85) 0%, rgba(31,27,22,0.4) 50%, transparent 100%)',
+        }}
+      />
+
+      {/* Tap-target overlay — captures double-tap-to-like.
+          Stops 88px above the bottom so it doesn't sit under (and steal
+          clicks from) the BottomNav. */}
       <button
         onClick={onMediaTap as unknown as React.MouseEventHandler<HTMLButtonElement>}
-        className="absolute inset-0 block cursor-default"
+        className="absolute inset-x-0 top-0 block cursor-default bg-transparent"
+        style={{ bottom: 88 }}
         aria-label={`Post by ${post.author.name}`}
       >
-        <img
-          src={post.media.url}
-          alt=""
-          className={[
-            'absolute inset-0 h-full w-full object-cover transition-transform duration-700',
-            isActive ? 'scale-100' : 'scale-[1.02]',
-          ].join(' ')}
-          draggable={false}
-        />
-        {/* Top + bottom gradients for legibility */}
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-32"
-          style={{
-            background: 'linear-gradient(to bottom, rgba(31,27,22,0.45), transparent)',
-          }}
-        />
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3"
-          style={{
-            background:
-              'linear-gradient(to top, rgba(31,27,22,0.85) 0%, rgba(31,27,22,0.4) 50%, transparent 100%)',
-          }}
-        />
-
         {/* Heart burst */}
         {burst && (
           <span
