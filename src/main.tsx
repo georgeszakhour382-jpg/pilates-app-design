@@ -1,10 +1,27 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+import { ToastProvider } from './components/ui/Toast';
+import { I18nProvider } from './lib/i18n';
 import './index.css';
+
+// Single client per browser tab. 30s stale time matches the dashboard's
+// posture so the prototype feels equally responsive against the live API.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 },
+  },
+});
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <I18nProvider>
+        <ToastProvider>
+          <App />
+        </ToastProvider>
+      </I18nProvider>
+    </QueryClientProvider>
   </React.StrictMode>,
 );

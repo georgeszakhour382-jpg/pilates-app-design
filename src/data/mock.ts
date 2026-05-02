@@ -574,3 +574,267 @@ export const instructorToday = {
     },
   ],
 };
+
+// =============================================================================
+// Social feed posts (shared between students and instructors).
+// Local-only mock until the marketplace gains a Posts model.
+// =============================================================================
+
+export type PostMediaKind = 'image' | 'video';
+export type PostAuthorRole = 'student' | 'instructor' | 'studio';
+
+export interface PostAuthor {
+  id: string;
+  name: string;
+  handle: string;
+  avatar: string;
+  role: PostAuthorRole;
+  studioName?: string;
+}
+
+export interface PostComment {
+  id: string;
+  author: PostAuthor;
+  body: string;
+  createdAt: string; // relative (e.g. '12m ago') for the prototype
+}
+
+export interface Post {
+  id: string;
+  author: PostAuthor;
+  media: { kind: PostMediaKind; url: string };
+  caption: string;
+  createdAt: string; // relative
+  likes: number;
+  liked: boolean;
+  saved: boolean;
+  comments: PostComment[];
+  // Optional editorial styling cues
+  toneTag?: 'practice' | 'community' | 'reflection' | 'class';
+}
+
+const photoP = (id: string, w = 900, h = 1600) =>
+  `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&h=${h}&q=80`;
+
+const avatar = (id: string) =>
+  `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=160&h=160&q=80`;
+
+const A_NOUR: PostAuthor = {
+  id: 'a-nour',
+  name: 'Nour Kassem',
+  handle: 'nour.k',
+  avatar: avatar('1438761681033-6461ffad8d80'),
+  role: 'instructor',
+  studioName: 'Beirut Pilates',
+};
+const A_LARA: PostAuthor = {
+  id: 'a-lara',
+  name: 'Lara Chedid',
+  handle: 'lara.chedid',
+  avatar: avatar('1494790108377-be9c29b29330'),
+  role: 'instructor',
+  studioName: 'Tripoli Pilates Loft',
+};
+const A_BEIRUT: PostAuthor = {
+  id: 'a-beirut-pilates',
+  name: 'Beirut Pilates',
+  handle: 'beirut.pilates',
+  avatar: avatar('1518611012118-696072aa579a'),
+  role: 'studio',
+  studioName: 'Beirut Pilates',
+};
+const A_REFORMER: PostAuthor = {
+  id: 'a-reformer-room',
+  name: 'The Reformer Room',
+  handle: 'reformer.room',
+  avatar: avatar('1599447421416-3414500d18a5'),
+  role: 'studio',
+  studioName: 'The Reformer Room',
+};
+const A_MARYAM: PostAuthor = {
+  id: 'a-maryam',
+  name: 'Maryam Saab',
+  handle: 'maryam.s',
+  avatar: avatar('1573497019940-1c28c88b4f3e'),
+  role: 'student',
+};
+const A_DANA: PostAuthor = {
+  id: 'a-dana',
+  name: 'Dana Hage',
+  handle: 'dana.h',
+  avatar: avatar('1534528741775-53994a69daeb'),
+  role: 'student',
+};
+const A_TARA: PostAuthor = {
+  id: 'a-tara',
+  name: 'Tara Najjar',
+  handle: 'tara.naj',
+  avatar: avatar('1488161628813-04466f872be2'),
+  role: 'student',
+};
+const A_MAYA: PostAuthor = {
+  id: 'a-maya',
+  name: 'Maya Najm',
+  handle: 'maya.naj',
+  avatar: avatar('1487412720507-e7ab37603c6f'),
+  role: 'instructor',
+  studioName: 'Byblos Coastal Studio',
+};
+
+export const posts: Post[] = [
+  {
+    id: 'p1',
+    author: A_NOUR,
+    media: { kind: 'image', url: photoP('1518611012118-696072aa579a') },
+    caption: 'Three breaths before every roll-down. The class doesn’t start when the music does — it starts here.',
+    createdAt: '2h',
+    likes: 248,
+    liked: false,
+    saved: false,
+    toneTag: 'reflection',
+    comments: [
+      { id: 'c1', author: A_DANA, body: 'Needed this today ✨', createdAt: '1h' },
+      { id: 'c2', author: A_MARYAM, body: 'Booking your 7am tomorrow', createdAt: '40m' },
+    ],
+  },
+  {
+    id: 'p2',
+    author: A_BEIRUT,
+    media: { kind: 'image', url: photoP('1599058917212-d750089bc07e') },
+    caption: 'New schedule for May. Sunrise reformer is now Tue/Thu/Sat, 6:30am. Six mats.',
+    createdAt: '5h',
+    likes: 412,
+    liked: true,
+    saved: false,
+    toneTag: 'class',
+    comments: [
+      { id: 'c3', author: A_TARA, body: 'Thu booked!', createdAt: '4h' },
+    ],
+  },
+  {
+    id: 'p3',
+    author: A_LARA,
+    media: { kind: 'image', url: photoP('1581009146145-b5ef050c2e1e') },
+    caption: 'Hip flexors deserve their own warm-up. A 4-minute sequence I’ve been opening every class with this week.',
+    createdAt: '8h',
+    likes: 189,
+    liked: false,
+    saved: true,
+    toneTag: 'practice',
+    comments: [],
+  },
+  {
+    id: 'p4',
+    author: A_DANA,
+    media: { kind: 'image', url: photoP('1571019613454-1cb2f99b2d8b') },
+    caption: 'Twelve weeks in. Different shoulders.',
+    createdAt: '12h',
+    likes: 76,
+    liked: false,
+    saved: false,
+    toneTag: 'community',
+    comments: [
+      { id: 'c4', author: A_NOUR, body: 'Watching this is the highlight of my week', createdAt: '10h' },
+    ],
+  },
+  {
+    id: 'p5',
+    author: A_REFORMER,
+    media: { kind: 'image', url: photoP('1545389336-cf090694435e') },
+    caption: 'Mar Mikhael, 7:15am. The light through the windows is the reason this floor exists.',
+    createdAt: '1d',
+    likes: 533,
+    liked: false,
+    saved: false,
+    toneTag: 'reflection',
+    comments: [],
+  },
+  {
+    id: 'p6',
+    author: A_MAYA,
+    media: { kind: 'image', url: photoP('1601925260368-ae2f83cf8b7f') },
+    caption: 'Pre-postnatal cohort starts next Monday. Six spots, eight weeks, mat-only.',
+    createdAt: '1d',
+    likes: 91,
+    liked: false,
+    saved: true,
+    toneTag: 'class',
+    comments: [
+      { id: 'c5', author: A_MARYAM, body: 'Sending to my sister', createdAt: '20h' },
+    ],
+  },
+  {
+    id: 'p7',
+    author: A_TARA,
+    media: { kind: 'image', url: photoP('1540206395-68808572332f') },
+    caption: 'First time keeping the tower flat through a teaser. Small wins.',
+    createdAt: '2d',
+    likes: 142,
+    liked: true,
+    saved: false,
+    toneTag: 'community',
+    comments: [],
+  },
+  {
+    id: 'p8',
+    author: A_NOUR,
+    media: { kind: 'image', url: photoP('1506629082955-511b1aa562c8') },
+    caption: '“Teach the body what it forgot.” — Ron Fletcher, paraphrased, often.',
+    createdAt: '2d',
+    likes: 318,
+    liked: false,
+    saved: true,
+    toneTag: 'reflection',
+    comments: [
+      { id: 'c6', author: A_LARA, body: 'Quoting this on Friday', createdAt: '1d' },
+    ],
+  },
+  {
+    id: 'p9',
+    author: A_BEIRUT,
+    media: { kind: 'image', url: photoP('1518310383802-640c2de311b2') },
+    caption: 'Mid-week reset class added Wednesday 12:00. Perfect for the work-from-home crowd.',
+    createdAt: '3d',
+    likes: 207,
+    liked: false,
+    saved: false,
+    toneTag: 'class',
+    comments: [],
+  },
+  {
+    id: 'p10',
+    author: A_MARYAM,
+    media: { kind: 'image', url: photoP('1518611012118-696072aa579a') },
+    caption: 'Found my favorite hour of the week. 6am Mar Mikhael, you’re it.',
+    createdAt: '3d',
+    likes: 64,
+    liked: false,
+    saved: false,
+    toneTag: 'community',
+    comments: [],
+  },
+  {
+    id: 'p11',
+    author: A_LARA,
+    media: { kind: 'image', url: photoP('1599058917212-d750089bc07e') },
+    caption: 'Reformer + 30 minutes of footwork. The unglamorous stuff that makes everything else possible.',
+    createdAt: '4d',
+    likes: 175,
+    liked: true,
+    saved: false,
+    toneTag: 'practice',
+    comments: [],
+  },
+  {
+    id: 'p12',
+    author: A_REFORMER,
+    media: { kind: 'image', url: photoP('1545389336-cf090694435e') },
+    caption: 'Doors open at 6. Towels stocked. See you Saturday.',
+    createdAt: '5d',
+    likes: 287,
+    liked: false,
+    saved: false,
+    toneTag: 'class',
+    comments: [],
+  },
+];

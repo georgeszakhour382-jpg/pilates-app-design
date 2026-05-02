@@ -1,44 +1,167 @@
-import { Calendar, MapPin, Clock, Plus } from 'lucide-react';
-import { findInstructor, findStudio, pastBookings, upcomingBookings } from '../data/mock';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Calendar, Plus } from 'lucide-react';
 import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
 import { Button } from '../components/ui/Button';
+import { useToast } from '../components/ui/Toast';
+import { api, ApiError, type BookingSummary } from '../lib/api';
+import { authStore } from '../lib/auth';
+import { enrichBooking } from '../lib/displayAdapters';
+import { useT } from '../lib/i18n';
+import { studios as mockStudios } from '../data/mock';
+
+const FALLBACK_HERO =
+  'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=900&h=700&q=80';
+
+const heroForStudio = (studioId: string, studioName: string): string => {
+  const m = mockStudios.find((s) => s.id === studioId || s.name === studioName);
+  return m?.hero ?? FALLBACK_HERO;
+};
+
+const neighborhoodForStudio = (studioId: string, studioName: string): string | null => {
+  const m = mockStudios.find((s) => s.id === studioId || s.name === studioName);
+  return m?.neighborhood ?? null;
+};
 
 export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
+  const signedIn = !!authStore.accessToken();
+  const t = useT();
+
+  const upcomingQuery = useQuery({
+    queryKey: ['bookings.listMine', 'UPCOMING'],
+    queryFn: () => api.bookings.listMine('UPCOMING'),
+    enabled: signedIn,
+  });
+
+  const pastQuery = useQuery({
+    queryKey: ['bookings.listMine', 'PAST'],
+    queryFn: () => api.bookings.listMine('PAST'),
+    enabled: signedIn,
+  });
+
+  const qc = useQueryClient();
+  const toast = useToast();
+  const cancel = useMutation({
+    mutationFn: (bookingId: string) => api.bookings.cancel(bookingId),
+    // Optimistic remove from the upcoming list so the row disappears
+    // immediately. Roll back if the server call fails.
+    onMutate: async (bookingId) => {
+      await qc.cancelQueries({ queryKey: ['bookings.listMine', 'UPCOMING'] });
+      const prev = qc.getQueryData<{ items: BookingSummary[]; nextCursor: string | null }>([
+        'bookings.listMine',
+        'UPCOMING',
+      ]);
+      if (prev) {
+        qc.setQueryData(['bookings.listMine', 'UPCOMING'], {
+          ...prev,
+          items: prev.items.filter((b) => b.id !== bookingId),
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _bookingId, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData(['bookings.listMine', 'UPCOMING'], ctx.prev);
+      }
+      toast.show(t('bookings.cancel_failed'), 'warn');
+    },
+    onSuccess: () => {
+      toast.show(t('bookings.cancel_success'));
+      // Cross-screen invalidation: the cancelled session should now be
+      // available again on StudioDetail's schedule (and any 'already
+      // booked' grayed state must clear too).
+      void qc.invalidateQueries({ queryKey: ['bookings.listMine'] });
+      void qc.invalidateQueries({ queryKey: ['classes.list'] });
+      void qc.invalidateQueries({ queryKey: ['classes.get'] });
+    },
+  });
+
+  if (!signedIn) {
+    return (
+      <div className="fade-in relative h-full bg-bone">
+        <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
+          <header className="px-5 pt-14">
+            <div className="label-eyebrow">{t('bookings.practice')}</div>
+            <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t('bookings.title')}</h1>
+          </header>
+          <div className="mt-10 px-5">
+            <div className="rounded-2xl border border-dashed border-stone bg-bone px-5 py-10 text-center">
+              <Calendar size={20} className="mx-auto text-ink-60" />
+              <h3 className="font-display mt-3 text-[20px]">{t('bookings.sign_in_title')}</h3>
+              <p className="mt-1.5 text-[13px] text-ink-60">
+                {t('bookings.sign_in_sub')}
+              </p>
+              <Button size="md" className="mt-5" onClick={() => goto('onboarding')}>
+                {t('common.sign_in')}
+              </Button>
+            </div>
+          </div>
+        </div>
+        <BottomNav active="bookings" onSelect={goto} />
+      </div>
+    );
+  }
+
+  // Backend's `listMine UPCOMING` filters by class start time but doesn't
+  // exclude CANCELLED — see marketplace issue. Filter client-side until that
+  // ships so cancelled-but-still-future-dated bookings don't reappear.
+  const upcoming = (upcomingQuery.data?.items ?? [])
+    .filter((b) => b.status !== 'CANCELLED' && b.status !== 'REFUNDED')
+    .map(enrichBooking);
+  const past = (pastQuery.data?.items ?? []).map(enrichBooking);
+
   return (
     <div className="fade-in relative h-full bg-bone">
       <div className="absolute inset-0 overflow-y-auto pb-[160px] scrollbar-none">
         <header className="px-5 pt-14">
-          <div className="label-eyebrow">Your practice</div>
-          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">Bookings</h1>
+          <div className="label-eyebrow">{t('bookings.practice')}</div>
+          <h1 className="font-display mt-1 text-[30px] leading-[1.1]">{t('bookings.title')}</h1>
         </header>
 
         {/* Upcoming */}
         <section className="mt-6 px-5">
           <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-[20px]">Upcoming</h2>
+            <h2 className="font-display text-[20px]">{t('bookings.upcoming')}</h2>
             <button
               onClick={() => goto('discover')}
               className="press-soft inline-flex items-center gap-1 text-[12px] font-medium text-ink-60"
             >
-              <Plus size={14} /> Book
+              <Plus size={14} /> {t('bookings.book')}
             </button>
           </div>
 
+          {upcomingQuery.isLoading && (
+            <p className="mt-4 text-[13px] text-ink-60">{t('common.loading')}</p>
+          )}
+          {upcomingQuery.error && (
+            <p className="mt-4 text-[13px] text-terracotta">
+              {upcomingQuery.error instanceof ApiError
+                ? upcomingQuery.error.message
+                : t('common.error')}
+            </p>
+          )}
+
           <ul className="mt-4 space-y-3">
-            {upcomingBookings.map((b, idx) => {
-              const studio = findStudio(b.studioId);
-              const instructor = findInstructor(b.instructorId);
+            {upcoming.map((b, idx) => {
               const next = idx === 0;
+              const hero = heroForStudio(b.studioId, b.studioName);
+              const neighborhood = neighborhoodForStudio(b.studioId, b.studioName);
+              const cancellable =
+                b.rawStatus === 'CONFIRMED' ||
+                b.rawStatus === 'REQUESTED' ||
+                b.rawStatus === 'WAITLISTED';
               return (
                 <li key={b.id}>
-                  <button
-                    onClick={() => goto('studio')}
+                  <div
                     className="press-soft relative w-full overflow-hidden rounded-[20px] text-start"
                     style={{ boxShadow: 'var(--shadow-soft)' }}
                   >
                     <div className="relative h-44 w-full">
-                      <img src={studio.hero} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                      <img
+                        src={hero}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
                       <div
                         className="absolute inset-0"
                         style={{
@@ -49,45 +172,51 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
                       <div className="absolute inset-0 flex flex-col justify-between p-5 text-bone">
                         <div className="flex items-center justify-between">
                           <span className="rounded-full bg-bone/20 px-2.5 py-1 text-[11px] font-medium tracking-wide backdrop-blur-sm">
-                            {next ? 'Next class' : 'Upcoming'} · {b.countdown}
+                            {next ? t('bookings.next_class') : t('bookings.upcoming')}
+                            {b.countdown ? ` · ${b.countdown}` : ''}
                           </span>
                           <span className="num text-[12px] text-bone/85">{b.date}</span>
                         </div>
                         <div>
-                          <div className="label-eyebrow !text-bone/70">{studio.neighborhood}</div>
-                          <h3 className="font-display mt-1 text-[24px] leading-tight">{studio.name}</h3>
+                          {neighborhood && (
+                            <div className="label-eyebrow !text-bone/70">{neighborhood}</div>
+                          )}
+                          <h3 className="font-display mt-1 text-[24px] leading-tight">
+                            {b.studioName}
+                          </h3>
                           <div className="mt-2 flex items-center gap-3 text-[12px] text-bone/85">
                             <span className="num font-medium text-bone">{b.time}</span>
                             <span>·</span>
-                            <span>{instructor.fullName}</span>
+                            <span className="num">${b.price}</span>
                           </div>
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 bg-bone px-5 py-3">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
+                        onClick={() => goto('discover')}
                         className="press-soft flex-1 text-[13px] font-medium underline underline-offset-4"
                       >
-                        Get directions
+                        {t('booking.book_another')}
                       </button>
                       <span className="h-4 w-px bg-stone" />
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        disabled={!cancellable || cancel.isPending}
+                        onClick={() => {
+                          if (window.confirm(t('bookings.cancel_confirm'))) {
+                            cancel.mutate(b.id);
+                          }
                         }}
-                        className="press-soft flex-1 text-[13px] font-medium text-ink-60 underline underline-offset-4"
+                        className="press-soft flex-1 text-[13px] font-medium text-ink-60 underline underline-offset-4 disabled:opacity-50"
                       >
-                        Cancel · free
+                        {cancel.isPending ? t('bookings.cancelling') : t('bookings.cancel_free')}
                       </button>
                     </div>
-                  </button>
+                  </div>
                 </li>
               );
             })}
-            {upcomingBookings.length === 0 && (
+            {!upcomingQuery.isLoading && upcoming.length === 0 && (
               <EmptyUpcoming onAction={() => goto('discover')} />
             )}
           </ul>
@@ -95,41 +224,46 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
 
         {/* Past */}
         <section className="mt-9 px-5">
-          <h2 className="font-display text-[20px]">Past</h2>
+          <h2 className="font-display text-[20px]">{t('bookings.past')}</h2>
+          {pastQuery.isLoading && (
+            <p className="mt-4 text-[13px] text-ink-60">Loading…</p>
+          )}
           <ul className="mt-4 divide-y divide-stone/70">
-            {pastBookings.map((b) => {
-              const studio = findStudio(b.studioId);
-              const instructor = findInstructor(b.instructorId);
+            {past.map((b) => {
               const cancelled = b.outcome === 'cancelled';
+              const hero = heroForStudio(b.studioId, b.studioName);
               return (
                 <li key={b.id} className="flex items-center gap-3 py-4">
                   <img
-                    src={studio.hero}
+                    src={hero}
                     alt=""
                     className="h-14 w-14 flex-shrink-0 rounded-xl object-cover"
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[14.5px] font-medium">{studio.name}</span>
+                      <span className="text-[14.5px] font-medium">{b.studioName}</span>
                       {cancelled && (
                         <span className="rounded-full bg-stone-soft px-2 py-0.5 text-[10px] font-medium text-ink-60">
-                          Cancelled
+                          {t('bookings.cancelled')}
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 text-[12px] text-ink-60">
-                      {instructor.fullName} · <span className="num">{b.date} · {b.time}</span>
+                    <div className="mt-0.5 text-[12px] text-ink-60 num">
+                      {b.date} · {b.time}
                     </div>
                   </div>
                   <button
-                    onClick={() => goto('studio')}
+                    onClick={() => goto('discover')}
                     className="press-soft text-[12px] font-medium text-ink-60 underline underline-offset-4"
                   >
-                    Rebook
+                    {t('bookings.book')}
                   </button>
                 </li>
               );
             })}
+            {!pastQuery.isLoading && past.length === 0 && (
+              <li className="py-4 text-[13px] text-ink-60">{t('bookings.no_past')}</li>
+            )}
           </ul>
         </section>
       </div>
@@ -140,20 +274,19 @@ export function MyBookings({ goto }: { goto: (id: ScreenId) => void }) {
 }
 
 function EmptyUpcoming({ onAction }: { onAction: () => void }) {
+  const t = useT();
   return (
     <li>
       <div className="rounded-2xl border border-dashed border-stone bg-bone px-5 py-10 text-center">
         <Calendar size={20} className="mx-auto text-ink-60" />
-        <h3 className="font-display mt-3 text-[20px]">No bookings yet.</h3>
-        <p className="mt-1.5 text-[13px] text-ink-60">Find a class you like — most studios open 4 weeks ahead.</p>
+        <h3 className="font-display mt-3 text-[20px]">{t('bookings.empty_title')}</h3>
+        <p className="mt-1.5 text-[13px] text-ink-60">
+          {t('bookings.empty_sub')}
+        </p>
         <Button size="md" className="mt-5" onClick={onAction}>
-          Browse studios
+          {t('bookings.browse')}
         </Button>
       </div>
     </li>
   );
 }
-
-// Lint-keepers
-void MapPin;
-void Clock;
