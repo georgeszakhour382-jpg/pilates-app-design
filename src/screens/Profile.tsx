@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronRight,
   Bell,
@@ -11,17 +11,18 @@ import {
   LogOut,
   UserPlus,
   Check,
+  Pencil,
 } from 'lucide-react';
 import type { ScreenId } from '../App';
 import { BottomNav } from '../components/ui/BottomNav';
 import { Button } from '../components/ui/Button';
 import { Sheet } from '../components/ui/Sheet';
 import { useToast } from '../components/ui/Toast';
-import { api } from '../lib/api';
+import { api, type CustomerProfileWire, type UpdateProfileInput } from '../lib/api';
 import { authStore } from '../lib/auth';
 import { useI18n, type Lang } from '../lib/i18n';
 
-type RowId = 'pay' | 'lang' | 'city' | 'notif' | 'priv' | 'help';
+type RowId = 'pay' | 'lang' | 'city' | 'notif' | 'priv' | 'help' | 'edit';
 
 interface Row {
   id: RowId;
@@ -43,10 +44,15 @@ function readPref<T extends string>(key: string, fallback: T): T {
   return (v as T) || fallback;
 }
 
+// Map between i18n UI codes and the backend's enum values.
+const LANG_TO_BACKEND: Record<Lang, 'EN' | 'AR' | 'FR'> = { en: 'EN', ar: 'AR', fr: 'FR' };
+const LANG_FROM_BACKEND: Record<'EN' | 'AR' | 'FR', Lang> = { EN: 'en', AR: 'ar', FR: 'fr' };
+
 export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
   const signedIn = !!authStore.accessToken();
   const toast = useToast();
   const { lang, setLang, t } = useI18n();
+  const queryClient = useQueryClient();
 
   const [openSheet, setOpenSheet] = useState<RowId | null>(null);
   const [city, setCity] = useState<string>(() => readPref<string>('pilates:city', 'Beirut'));
@@ -73,6 +79,34 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
     queryFn: () => api.auth.me(),
     enabled: signedIn,
   });
+
+  const profileQuery = useQuery({
+    queryKey: ['customers.getMine'],
+    queryFn: () => api.customers.getMine(),
+    enabled: signedIn,
+  });
+
+  const updateProfile = useMutation({
+    mutationFn: (input: UpdateProfileInput) => api.customers.updateMine(input),
+    onSuccess: (next) => {
+      queryClient.setQueryData(['customers.getMine'], next);
+    },
+  });
+
+  // Reflect server values into the local UI mirrors so the "city" + "lang"
+  // pickers open with the right pre-selection on first load. We only push
+  // *down* from the server here; pickers push *up* via updateProfile when
+  // changed.
+  useEffect(() => {
+    const p = profileQuery.data;
+    if (!p) return;
+    if (p.city) setCity(p.city);
+    const uiLang = LANG_FROM_BACKEND[p.preferredLanguage];
+    if (uiLang !== lang) setLang(uiLang);
+    // We deliberately don't depend on `lang`/`setLang` so we don't fight the
+    // user mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileQuery.data?.id]);
 
   const upcomingQuery = useQuery({
     queryKey: ['bookings.listMine', 'UPCOMING'],
@@ -119,8 +153,10 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
   }
 
   const me = meQuery.data;
-  const fullName = me?.fullName ?? 'You';
-  const phone = me?.phone ?? '';
+  const profile = profileQuery.data;
+  const fullName = profile?.fullName ?? me?.fullName ?? 'You';
+  const phone = profile?.phone ?? me?.phone ?? '';
+  const avatarUrl = profile?.avatarUrl ?? null;
   const initials = fullName
     .split(/\s+/)
     .map((p) => p.charAt(0))
@@ -188,16 +224,35 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
         {/* Identity card */}
         <section className="mt-6 mx-5 overflow-hidden rounded-[20px] bg-sand p-5">
           <div className="flex items-center gap-4">
-            <div
-              className="grid h-16 w-16 place-items-center rounded-full bg-ink text-bone font-display text-[22px]"
-              aria-hidden
-            >
-              {initials}
-            </div>
-            <div className="flex-1">
-              <div className="text-[16px] font-medium">{fullName}</div>
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt=""
+                className="h-16 w-16 flex-shrink-0 rounded-full object-cover ring-2 ring-bone"
+              />
+            ) : (
+              <div
+                className="grid h-16 w-16 place-items-center rounded-full bg-ink text-bone font-display text-[22px]"
+                aria-hidden
+              >
+                {initials}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-[16px] font-medium truncate">{fullName}</div>
               <div className="mt-0.5 text-[12px] text-ink-60 num">{phone}</div>
+              {profile?.city && (
+                <div className="mt-0.5 text-[12px] text-ink-60">{profile.city}</div>
+              )}
             </div>
+            <button
+              type="button"
+              onClick={() => setOpenSheet('edit')}
+              aria-label={t('profile.edit')}
+              className="press-soft grid h-9 w-9 place-items-center rounded-full bg-bone text-ink"
+            >
+              <Pencil size={15} />
+            </button>
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3 text-center">
@@ -249,6 +304,34 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
       {/* Sheets — one per setting row. Kept inside the screen so the phone-frame
           containment styling applies. */}
       <Sheet
+        open={openSheet === 'edit'}
+        title={t('profile.edit_profile_title')}
+        onClose={() => setOpenSheet(null)}
+      >
+        {profile && (
+          <EditProfileForm
+            profile={profile}
+            saving={updateProfile.isPending}
+            onCancel={() => setOpenSheet(null)}
+            onSave={async (patch) => {
+              try {
+                await updateProfile.mutateAsync(patch);
+                if (patch.city !== undefined && patch.city) setCity(patch.city);
+                setOpenSheet(null);
+                toast.show(t('profile.profile_saved_toast'));
+              } catch (e) {
+                toast.show(
+                  e instanceof Error && e.message ? e.message : t('profile.profile_save_failed'),
+                  'warn',
+                );
+              }
+            }}
+            t={t}
+          />
+        )}
+      </Sheet>
+
+      <Sheet
         open={openSheet === 'lang'}
         title={t('profile.language')}
         onClose={() => setOpenSheet(null)}
@@ -263,6 +346,11 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
                     setLang(opt.value as Lang);
                     setOpenSheet(null);
                     toast.show(t('profile.lang_set', { lang: opt.label }));
+                    if (signedIn) {
+                      updateProfile.mutate({
+                        preferredLanguage: LANG_TO_BACKEND[opt.value as Lang],
+                      });
+                    }
                   }}
                   className={[
                     'press-soft flex w-full items-center justify-between rounded-2xl border bg-bone px-4 py-3 text-start',
@@ -293,6 +381,7 @@ export function Profile({ goto }: { goto: (id: ScreenId) => void }) {
                     setCity(c);
                     setOpenSheet(null);
                     toast.show(t('profile.city_set', { city: c }));
+                    if (signedIn) updateProfile.mutate({ city: c });
                   }}
                   className={[
                     'press-soft flex w-full items-center justify-between rounded-2xl border bg-bone px-4 py-3 text-start',
@@ -499,5 +588,205 @@ function ToggleRow({
         />
       </span>
     </button>
+  );
+}
+
+// =============================================================================
+// EditProfileForm — backed by customers.updateMine
+// =============================================================================
+
+const AVATAR_GALLERY = [
+  'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=240&h=240&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&h=240&q=80',
+  'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=240&h=240&q=80',
+  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=240&h=240&q=80',
+  'https://images.unsplash.com/photo-1517363898874-737b62a7db91?auto=format&fit=crop&w=240&h=240&q=80',
+  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=240&h=240&q=80',
+];
+
+function EditProfileForm({
+  profile,
+  saving,
+  onCancel,
+  onSave,
+  t,
+}: {
+  profile: CustomerProfileWire;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (patch: UpdateProfileInput) => void | Promise<void>;
+  t: ReturnType<typeof useI18n>['t'];
+}) {
+  const [fullName, setFullName] = useState(profile.fullName);
+  const [email, setEmail] = useState(profile.email ?? '');
+  const [city, setCity] = useState(profile.city ?? '');
+  const [neighborhood, setNeighborhood] = useState(profile.neighborhood ?? '');
+  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? '');
+  const [bio, setBio] = useState(profile.bio ?? '');
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (saving) return;
+    const patch: UpdateProfileInput = {};
+    if (fullName.trim() && fullName.trim() !== profile.fullName) patch.fullName = fullName.trim();
+    const emailNext = email.trim() || null;
+    if (emailNext !== (profile.email ?? null)) patch.email = emailNext;
+    const cityNext = city.trim() || null;
+    if (cityNext !== (profile.city ?? null)) patch.city = cityNext;
+    const nbNext = neighborhood.trim() || null;
+    if (nbNext !== (profile.neighborhood ?? null)) patch.neighborhood = nbNext;
+    const avatarNext = avatarUrl.trim() || null;
+    if (avatarNext !== (profile.avatarUrl ?? null)) patch.avatarUrl = avatarNext;
+    const bioNext = bio.trim() || null;
+    if (bioNext !== (profile.bio ?? null)) patch.bio = bioNext;
+    if (Object.keys(patch).length === 0) {
+      onCancel();
+      return;
+    }
+    void onSave(patch);
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-5">
+      <p className="text-[13px] text-ink-60">{t('profile.edit_profile_sub')}</p>
+
+      {/* Avatar picker */}
+      <div>
+        <div className="label-eyebrow mb-2">{t('profile.field_avatar')}</div>
+        <div className="flex items-center gap-3">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt=""
+              className="h-16 w-16 flex-shrink-0 rounded-full object-cover ring-2 ring-stone"
+            />
+          ) : (
+            <div className="grid h-16 w-16 flex-shrink-0 place-items-center rounded-full bg-ink text-bone font-display text-[20px]">
+              {fullName
+                .split(/\s+/)
+                .map((p) => p.charAt(0))
+                .slice(0, 2)
+                .join('')
+                .toUpperCase() || '·'}
+            </div>
+          )}
+          <div className="-mr-1 flex flex-1 gap-2 overflow-x-auto pr-1 scrollbar-none">
+            {AVATAR_GALLERY.map((url) => {
+              const sel = avatarUrl === url;
+              return (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => setAvatarUrl(url)}
+                  className={[
+                    'press-soft h-12 w-12 flex-shrink-0 overflow-hidden rounded-full',
+                    sel ? 'ring-2 ring-ink' : 'ring-1 ring-stone',
+                  ].join(' ')}
+                  aria-label="Pick avatar"
+                >
+                  <img src={url} alt="" className="h-full w-full object-cover" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <input
+          value={avatarUrl}
+          onChange={(e) => setAvatarUrl(e.target.value)}
+          placeholder="https://…"
+          className="mt-3 h-11 w-full rounded-xl border border-stone bg-bone px-3 text-[14px] focus:border-ink focus:outline-none"
+        />
+      </div>
+
+      <Field label={t('profile.field_name')}>
+        <input
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          required
+          maxLength={120}
+          className="h-11 w-full rounded-xl border border-stone bg-bone px-3 text-[15px] focus:border-ink focus:outline-none"
+        />
+      </Field>
+
+      <Field
+        label={t('profile.field_phone')}
+        hint={t('profile.field_phone_hint')}
+      >
+        <input
+          value={profile.phone}
+          readOnly
+          disabled
+          className="num h-11 w-full rounded-xl border border-stone bg-sand px-3 text-[15px] text-ink-60"
+        />
+      </Field>
+
+      <Field label={t('profile.field_email')}>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          maxLength={254}
+          placeholder="you@example.com"
+          className="h-11 w-full rounded-xl border border-stone bg-bone px-3 text-[15px] focus:border-ink focus:outline-none"
+        />
+      </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={t('profile.field_city')}>
+          <input
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            maxLength={120}
+            className="h-11 w-full rounded-xl border border-stone bg-bone px-3 text-[15px] focus:border-ink focus:outline-none"
+          />
+        </Field>
+        <Field label={t('profile.field_neighborhood')}>
+          <input
+            value={neighborhood}
+            onChange={(e) => setNeighborhood(e.target.value)}
+            maxLength={120}
+            className="h-11 w-full rounded-xl border border-stone bg-bone px-3 text-[15px] focus:border-ink focus:outline-none"
+          />
+        </Field>
+      </div>
+
+      <Field label={t('profile.field_bio')}>
+        <textarea
+          value={bio}
+          onChange={(e) => setBio(e.target.value)}
+          rows={3}
+          maxLength={500}
+          placeholder={t('profile.field_bio_placeholder')}
+          className="w-full rounded-xl border border-stone bg-bone p-3 text-[15px] leading-snug focus:border-ink focus:outline-none"
+        />
+      </Field>
+
+      <div className="flex gap-3 pt-1">
+        <Button variant="tertiary" size="md" onClick={onCancel} disabled={saving}>
+          {t('common.cancel') ?? 'Cancel'}
+        </Button>
+        <Button block size="md" disabled={saving || fullName.trim().length === 0} type="submit">
+          {saving ? t('common.loading') : t('profile.save')}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="label-eyebrow">{label}</span>
+      <span className="mt-2 block">{children}</span>
+      {hint && <span className="mt-1 block text-[12px] text-ink-60">{hint}</span>}
+    </label>
   );
 }

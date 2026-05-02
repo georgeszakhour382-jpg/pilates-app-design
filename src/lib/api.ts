@@ -164,6 +164,29 @@ export interface CreateBookingResult {
   position?: number;
 }
 
+export interface CustomerProfileWire {
+  id: string;
+  fullName: string;
+  phone: string;
+  email: string | null;
+  city: string | null;
+  neighborhood: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  preferredLanguage: 'EN' | 'AR' | 'FR';
+  memberSince: string;
+}
+
+export interface UpdateProfileInput {
+  fullName?: string;
+  email?: string | null;
+  city?: string | null;
+  neighborhood?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  preferredLanguage?: 'EN' | 'AR' | 'FR';
+}
+
 export interface PostAuthorWire {
   id: string;
   fullName: string;
@@ -230,6 +253,11 @@ export const api = {
       }),
     cancel: (bookingId: string) =>
       trpcMutation<BookingSummary>('bookings.cancel', { bookingId }),
+  },
+  customers: {
+    getMine: () => trpcQuery<CustomerProfileWire>('customers.getMine'),
+    updateMine: (input: UpdateProfileInput) =>
+      trpcMutation<CustomerProfileWire>('customers.updateMine', input),
   },
   posts: {
     feed: (input: { cursor?: string; limit?: number } = {}) =>
