@@ -493,8 +493,11 @@ function PostCard({
         )}
       </button>
 
-      {/* Author row + caption (bottom-left) */}
-      <div className="absolute inset-x-0 bottom-0 z-10 flex items-end gap-3 p-5 pb-[110px]">
+      {/* Author row + caption (bottom-left).
+          Container is pointer-events-none so its empty regions don't steal
+          clicks meant for the BottomNav 88px below; the author button + the
+          caption text re-enable pointer events on themselves. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end gap-3 p-5 pb-[110px]">
         <div className="min-w-0 flex-1">
           <button
             type="button"
@@ -502,7 +505,7 @@ function PostCard({
               e.stopPropagation();
               onAuthorTap();
             }}
-            className="press-soft flex items-center gap-2.5 text-start text-bone"
+            className="press-soft pointer-events-auto flex items-center gap-2.5 text-start text-bone"
           >
             <img
               src={post.author.avatar}
@@ -528,8 +531,10 @@ function PostCard({
         </div>
       </div>
 
-      {/* Action sidebar — bottom-right column */}
-      <div className="absolute bottom-[110px] right-3 z-10 flex flex-col items-center gap-5 text-bone">
+      {/* Action sidebar — bottom-right column.
+          Container itself is pointer-events-none so the empty gaps between
+          buttons don't intercept clicks; each ActionButton re-enables. */}
+      <div className="pointer-events-none absolute bottom-[110px] right-3 z-10 flex flex-col items-center gap-5 text-bone">
         <ActionButton
           onClick={(e) => {
             e.stopPropagation();
@@ -598,7 +603,7 @@ function ActionButton({
   return (
     <button
       onClick={onClick}
-      className="press-soft flex flex-col items-center gap-1 text-bone drop-shadow-md"
+      className="press-soft pointer-events-auto flex flex-col items-center gap-1 text-bone drop-shadow-md"
     >
       <span
         className="grid h-12 w-12 place-items-center rounded-full bg-ink/30 backdrop-blur-md"
